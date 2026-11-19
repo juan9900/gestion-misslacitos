@@ -16,6 +16,13 @@ App web para el celular, de un solo archivo, para manejar el emprendimiento Miss
 - `manifest.webmanifest` y `sw.js` permiten instalarla en la pantalla de inicio y abrirla sin internet. Esto necesita HTTPS, por ejemplo GitHub Pages.
 - Cuando publiques cambios, sube el número de `VERSION` en `sw.js`.
 
+## Publicar en Netlify
+
+1. En Netlify: **Add new site → Import an existing project → GitHub** y elige este repositorio.
+2. No hay que cambiar nada: `netlify.toml` ya indica que no hay build y que se publica la raíz.
+3. Cada push a `main` se publica solo.
+4. En el teléfono, abre el enlace y toca **Agregar a pantalla de inicio**.
+
 ## Privacidad
 
 No subas al repositorio copias de seguridad (`copia-*.json`). Contienen datos de las clientas.

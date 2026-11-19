@@ -16,6 +16,19 @@ App web para el celular, de un solo archivo, para manejar el emprendimiento Miss
 - `manifest.webmanifest` y `sw.js` permiten instalarla en la pantalla de inicio y abrirla sin internet. Esto necesita HTTPS, por ejemplo GitHub Pages.
 - Cuando publiques cambios, sube el número de `VERSION` en `sw.js`.
 
+## Base de datos (Supabase)
+
+- `config.js` tiene la URL del proyecto y la clave **publicable**. Es pública por diseño; nunca pongas ahí la `service_role` ni la `secret`.
+- `supabase/schema.sql` crea las tablas (`registros`, `miembros`) y las reglas de seguridad. Solo pueden leer o escribir las cuentas que estén en `miembros`, y el registro público está cerrado.
+- Para dar acceso a alguien nuevo:
+  1. Créale el usuario en **Authentication → Users**.
+  2. Ejecuta esto:
+     ```sql
+     insert into public.miembros (user_id, nombre) select id, email from auth.users where email = 'CORREO';
+     ```
+- La app guarda primero en el teléfono y después sube a la nube. Sin internet, los cambios esperan en cola. Nada se borra de verdad en la nube: queda marcado como borrado (`borrado = true`).
+- **Reportes PDF** (pantalla Dinero): del mes, del año, de una clienta y con todo. Se arman en el teléfono.
+
 ## Publicar en Netlify
 
 1. En Netlify: **Add new site → Import an existing project → GitHub** y elige este repositorio.

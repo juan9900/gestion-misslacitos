@@ -991,14 +991,15 @@ function estadoNube(){
  const b=$('#nube');if(!b)return;
  if(!enNube()){b.hidden=true;return}
  b.hidden=false;const n=nPend();
- const[cls,i,t]=NE.error?['mal','nubeno','Revisar']:!navigator.onLine&&n?['pend','nube','Sin internet']:n||NE.subiendo?['pend','sync','Guardando']:['ok','nubeok','Guardado'];
+ const sinRed=!navigator.onLine||/conexión/.test(NE.error);
+ const[cls,i,t]=sinRed&&(n||NE.error)?['pend','nube','Sin internet']:NE.error?['mal','nubeno','Revisar']:n||NE.subiendo?['pend','sync','Guardando']:['ok','nubeok','Guardado'];
  b.className='nube '+cls;b.innerHTML=ic(i)+t;
  const c=$('#nube-card');if(c)c.innerHTML=nubeCard();
 }
 function nubeCard(){const n=nPend();
- const[t,i,txt]=NE.error?['var(--coral)','nubeno',NE.error]:n?['var(--limon)','sync',`${plural(n,'cambio','cambios')} esperando para subir. ${navigator.onLine?'Subiendo…':'Se suben solos cuando vuelva el internet.'}`]
+ const[t,i,txt]=NE.error&&!/conexión/.test(NE.error)?['var(--coral)','nubeno',NE.error]:n?['var(--limon)','sync',`${plural(n,'cambio','cambios')} esperando para subir. ${navigator.onLine?'Subiendo…':'Se suben solos cuando vuelva el internet.'}`]
   :['var(--menta)','nubeok','Todo está guardado en la nube. Aunque se pierda el teléfono, no se pierde nada.'];
- return`<div class="estado" style="--t:${t}"><span class="ic">${ic(i,'l')}</span><div style="min-width:0"><b>${NE.error?'Hay un problema':n?'Guardando…':'Todo guardado'}</b><div class="sm">${esc(txt)}</div></div></div>
+ return`<div class="estado" style="--t:${t}"><span class="ic">${ic(i,'l')}</span><div style="min-width:0"><b>${NE.error&&!/conexión/.test(NE.error)?'Hay un problema':n?(navigator.onLine&&!NE.error?'Guardando…':'Sin internet'):'Todo guardado'}</b><div class="sm">${esc(txt)}</div></div></div>
   <div class="sm" style="margin-top:10px">Cuenta: <b style="color:var(--ink)">${esc(SES?SES.user.email:'')}</b></div>`}
 function mostrarLogin(){$('#login-logo').src=$('.logo img').src;$('#login').hidden=false;document.body.classList.add('lock')}
 function ocultarLogin(){$('#login').hidden=true;document.body.classList.remove('lock')}
@@ -1087,7 +1088,8 @@ function pdfTabla(doc,head,body,opt={}){
  doc.autoTable({startY:doc._y,head:[head.map(pdfTxt)],body:body.map(r=>r.map(pdfTxt)),foot:opt.foot?[opt.foot.map(pdfTxt)]:undefined,
   margin:{left:14,right:14},theme:'plain',styles:{font:'helvetica',fontSize:9,cellPadding:{top:2.2,bottom:2.2,left:2.5,right:2.5},textColor:[40,30,40],lineColor:[235,225,232],lineWidth:{bottom:.2}},
   headStyles:{fillColor:[27,20,25],textColor:255,fontStyle:'bold'},footStyles:{fillColor:suave(COLR.rosa),textColor:[27,20,25],fontStyle:'bold'},
-  alternateRowStyles:{fillColor:[251,247,249]},columnStyles:opt.cols||{},showFoot:'lastPage'});
+  alternateRowStyles:{fillColor:[251,247,249]},columnStyles:opt.cols||{},showFoot:'lastPage',
+  didParseCell:d=>{const c=(opt.cols||{})[d.column.index];if(c&&c.halign&&d.section!='body')d.cell.styles.halign=c.halign}});
  doc._y=doc.lastAutoTable.finalY+9}
 async function pdfEntregar(doc,nombre){
  const n=doc.getNumberOfPages();

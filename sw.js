@@ -1,7 +1,7 @@
-// Permite abrir la app sin internet. Cambia VERSION cuando publiques cambios.
-const VERSION = 'ml-v3';
+﻿// Permite abrir la app sin internet. Cambia VERSION cuando publiques cambios.
+const VERSION = 'ml-v4';
 const BASE = ['./', 'index.html', 'config.js', 'manifest.webmanifest', 'icon-180.png', 'icon-192.png', 'icon-512.png'];
-// Librerías y fuentes (con versión fija): se guardan la primera vez que se usan.
+// LibrerÃ­as y fuentes (con versiÃ³n fija): se guardan la primera vez que se usan.
 const CDN = [
   'https://cdnjs.cloudflare.com/ajax/libs/jspdf/',
   'https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/',
@@ -27,11 +27,11 @@ self.addEventListener('fetch', e => {
   if (req.method !== 'GET') return;
   const propio = url.startsWith(self.location.origin);
   const cdn = CDN.some(p => url.startsWith(p));
-  // Todo lo demás (por ejemplo la base de datos de Supabase) va directo a internet, sin guardar.
+  // Todo lo demÃ¡s (por ejemplo la base de datos de Supabase) va directo a internet, sin guardar.
   if (!propio && !cdn) return;
 
   if (cdn) {
-    // Archivos con versión fija: primero lo guardado.
+    // Archivos con versiÃ³n fija: primero lo guardado.
     e.respondWith(caches.match(req).then(r => r || fetch(req).then(res => {
       if (res && (res.ok || res.type === 'opaque')) { const c = res.clone(); caches.open(VERSION).then(x => x.put(req, c)); }
       return res;

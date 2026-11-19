@@ -1,0 +1,17 @@
+{
+  "name": "Miss Lacitoss",
+  "short_name": "Miss Lacitoss",
+  "description": "Pedidos, inventario, clientas y dinero de Miss Lacitoss",
+  "lang": "es",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#fff6fa",
+  "theme_color": "#121014",
+  "icons": [
+    { "src": "icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}

@@ -1,5 +1,5 @@
 // Permite abrir la app sin internet. Cambia VERSION cuando publiques cambios.
-const VERSION = 'ml-v1';
+const VERSION = 'ml-v2';
 const BASE = ['./', 'index.html', 'manifest.webmanifest', 'icon-180.png', 'icon-192.png', 'icon-512.png'];
 
 self.addEventListener('install', e => {

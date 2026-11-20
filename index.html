@@ -31,7 +31,7 @@
 }
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
 [hidden]{display:none!important}
-html{-webkit-text-size-adjust:100%;background:var(--bg)}
+html{-webkit-text-size-adjust:100%;background:var(--bg);overscroll-behavior:none}
 body{margin:0;min-height:100vh;color:var(--ink);font:600 17px/1.4 var(--fb);padding-bottom:calc(92px + env(safe-area-inset-bottom));overscroll-behavior-y:none;
  background:
   radial-gradient(70% 45% at 105% -5%,rgba(255,143,196,.13),transparent 70%),
@@ -41,7 +41,7 @@ body{margin:0;min-height:100vh;color:var(--ink);font:600 17px/1.4 var(--fb);padd
 body::before{content:"";position:fixed;inset:0;z-index:-1;pointer-events:none;opacity:.5;
  background-image:radial-gradient(rgba(255,255,255,.09) 1px,transparent 1.2px);background-size:22px 22px;
  -webkit-mask-image:linear-gradient(#000,transparent 75%);mask-image:linear-gradient(#000,transparent 75%)}
-body.lock{overflow:hidden}
+body.lock{overflow:hidden;position:fixed;left:0;right:0;width:100%}
 button,input,select,textarea{font:inherit;color:inherit}
 button{cursor:pointer}
 a{color:inherit;text-decoration:none}
@@ -271,6 +271,25 @@ nav button.on{background:var(--rosa);color:var(--tinta)}
 
 .instalar{display:flex;gap:10px;align-items:flex-start;color:var(--muted);font-size:14px;margin:26px 2px 8px;font-weight:600}
 
+/* ---------- recordatorios ---------- */
+#sheet,#login{overscroll-behavior:contain}
+.rec{display:flex;align-items:stretch;gap:8px;margin:8px 0}
+.rec .cu{flex:1;min-width:0;display:flex;align-items:center;gap:10px;text-align:left;color:inherit;font:inherit;background:var(--card);border:1px solid var(--line);border-radius:18px;padding:11px 12px}
+.rec .cu:active{background:var(--card2)}
+.rec .ic{flex:none;width:38px;height:38px;border-radius:12px;display:flex;align-items:center;justify-content:center;color:var(--t);background:color-mix(in srgb,var(--t) 15%,transparent)}
+.rec .tx{flex:1;min-width:0}
+.rec .tx b{display:block;overflow-wrap:anywhere;font-weight:700;line-height:1.25;font-size:16px}
+.rec .tx .sm{display:block;font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.rec .tx em{font-style:normal;font-weight:800;color:var(--t)}
+.rec .mini{flex:none;min-width:0;padding:8px 12px;font-size:14px;border-radius:18px;background:var(--card);color:var(--t)}
+.rec.urg .cu{border-color:color-mix(in srgb,var(--t) 45%,var(--line))}
+nav button{position:relative}
+.globo{position:absolute;top:3px;left:calc(50% + 6px);min-width:19px;height:19px;padding:0 5px;border-radius:10px;background:var(--coral);color:var(--tinta);font-size:11px;font-weight:800;line-height:19px;text-align:center;box-shadow:0 0 0 2px var(--hondo)}
+.sheet-top{display:flex;align-items:flex-start;justify-content:space-between;gap:12px}
+.sheet-top h3{flex:1;min-width:0;padding-top:6px}
+.cerrarx{flex:none;width:44px;height:44px;border-radius:14px;border:1.5px solid var(--line2);background:var(--card);color:var(--muted);display:flex;align-items:center;justify-content:center}
+.chips.fechas .chip{min-height:40px;padding:6px 13px;font-size:14px}
+
 /* ---------- nube ---------- */
 .nube{margin-left:auto;flex:none;display:inline-flex;align-items:center;gap:6px;min-height:40px;padding:6px 12px;border-radius:30px;border:1.5px solid var(--line2);background:var(--card);color:var(--t,var(--muted));font-weight:800;font-size:13px}
 .nube .i{width:20px;height:20px}
@@ -323,7 +342,7 @@ nav button.on{background:var(--rosa);color:var(--tinta)}
 
 <nav><div class="barra" id="menu"></div></nav>
 
-<div id="ov" hidden><div id="sheet" role="dialog" aria-modal="true"><div class="agarre"></div><h3 class="d" id="sheet-t"></h3><div id="sheet-b"></div></div></div>
+<div id="ov" hidden><div id="sheet" role="dialog" aria-modal="true"><div class="agarre"></div><div class="sheet-top"><h3 class="d" id="sheet-t"></h3><button class="cerrarx" type="button" data-a="cerrar" aria-label="Cerrar"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg></button></div><div id="sheet-b"></div></div></div>
 <div id="toast" class="oculto"></div>
 <div id="login" hidden><div class="caja">
  <div class="logo"><img src="" alt="Miss Lacitoss" id="login-logo"></div>
@@ -332,6 +351,7 @@ nav button.on{background:var(--rosa);color:var(--tinta)}
  <form id="login-f" novalidate>
   <label class="f"><span>Correo</span><input class="in" name="email" type="email" inputmode="email" autocomplete="username" placeholder="tucorreo@gmail.com"></label>
   <label class="f"><span>Contraseña</span><input class="in" name="clave" type="password" autocomplete="current-password" placeholder="••••••••"></label>
+  <button type="button" class="mini" data-a="verClave" style="width:100%;margin-top:10px">Mostrar la contraseña</button>
   <div id="login-err"></div>
   <button class="btn caramelo c-rosa" type="submit" style="margin-top:22px" id="login-btn">Entrar</button>
  </form>
@@ -493,13 +513,19 @@ function hoja(titulo,html,{ok='Guardar',c='c-menta',onOk,sinBoton}={}){
  $('#sheet-b').innerHTML=`<form id="sf" novalidate autocomplete="off">${html}<div id="sf-err"></div>
   ${sinBoton?'':`<button class="btn caramelo ${c}" type="submit" style="margin-top:24px">${ic('check')}${ok}</button>`}
   <button class="btn plano" type="button" data-a="cerrar">${sinBoton?'Cerrar':'Cancelar'}</button></form>`;
- alGuardar=onOk||null;$('#ov').hidden=false;document.body.classList.add('lock');$('#sheet').scrollTop=0;
+ alGuardar=onOk||null;soloInfo=!!sinBoton;$('#ov').hidden=false;bloquear(true);$('#sheet').scrollTop=0;
 }
-function cerrar(){$('#ov').hidden=true;document.body.classList.remove('lock');$('#sheet-b').innerHTML='';alGuardar=null}
+function cerrar(){$('#ov').hidden=true;if($('#login').hidden)bloquear(false);$('#sheet-b').innerHTML='';alGuardar=null}
+/* Fija la página de atrás mientras hay una hoja abierta (en iPhone no basta overflow:hidden) */
+let scrollGuardado=0,soloInfo=false;
+function bloquear(on){const b=document.body;
+ if(on){if(b.classList.contains('lock'))return;scrollGuardado=window.scrollY;b.style.top=-scrollGuardado+'px';b.classList.add('lock')}
+ else{if(!b.classList.contains('lock'))return;b.classList.remove('lock');b.style.top='';window.scrollTo(0,scrollGuardado)}}
 function error(txt){$('#sf-err').innerHTML=`<div class="err">${ic('alerta')}<span>${esc(txt)}</span></div>`;$('#sf-err').scrollIntoView({block:'center',behavior:'smooth'});return false}
 function preguntar(txt,ok,fn,c='c-coral'){hoja('¿Estás segura?',`<p style="font-size:18px;margin:8px 0 0;font-weight:600;line-height:1.5">${txt}</p>`,{ok,c,onOk:()=>{fn();return true}})}
 $('#sheet-b').addEventListener('submit',e=>{e.preventDefault();if(!alGuardar)return cerrar();if(alGuardar(new FormData(e.target),e.target)!==false)cerrar()});
-$('#ov').addEventListener('click',e=>{if(e.target.id=='ov')cerrar()});
+/* tocar fuera solo cierra las hojas informativas: en un formulario se perdería lo escrito */
+$('#ov').addEventListener('click',e=>{if(e.target.id=='ov'&&soloInfo)cerrar()});
 document.addEventListener('input',e=>{const i=e.target;
  if(i.matches('label [data-din]')){const eco=i.closest('label').querySelector('.eco');if(eco)eco.textContent=i.value.trim()?'= '+fmt(aCent(i.value)):''}
 });
@@ -517,7 +543,40 @@ const TITULOS={inicio:'Miss Lacitoss',pedidos:'Pedidos',inventario:'Inventario',
 $('#menu').innerHTML=SECC.map(([k,t,i])=>`<button data-a="tab" data-id="${k}">${ic(i)}${t}</button>`).join('');
 function irA(t){TAB=t;$$('#menu button').forEach(b=>b.classList.toggle('on',b.dataset.id==t));
  SECC.forEach(([k])=>$('#pg-'+k).hidden=k!=t);$('#titulo').textContent=TITULOS[t];pintar();window.scrollTo(0,0)}
-function pintar(){({inicio:pInicio,pedidos:pPedidos,inventario:pInventario,clientas:pClientas,dinero:pDinero})[TAB]()}
+function pintar(){({inicio:pInicio,pedidos:pPedidos,inventario:pInventario,clientas:pClientas,dinero:pDinero})[TAB]();globo()}
+/* numerito rojo en Inicio y en el icono de la app: cosas urgentes */
+function globo(){const n=recordatorios().filter(r=>r.u<=2).length,b=$('#menu [data-id=inicio]');if(!b)return;
+ let g=b.querySelector('.globo');if(n){if(!g){g=document.createElement('span');g.className='globo';b.appendChild(g)}g.textContent=n>9?'9+':n}else if(g)g.remove();
+ try{if(n)navigator.setAppBadge&&navigator.setAppBadge(n);else navigator.clearAppBadge&&navigator.clearAppBadge()}catch(e){}}
+const norm=s=>String(s??'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
+
+/* ---------- RECORDATORIOS: salen solos de los pedidos y del inventario ---------- */
+let REC_TODOS=false;
+function recordatorios(){
+ const L=[];
+ D.pedidos.forEach(p=>{
+  const n=nomCli(p),prods=p.items.map(i=>i.cant+' '+i.nombre).join(', ');
+  if(!p.entregado&&p.entrega){const d=diasHasta(p.entrega);
+   if(d<=7)L.push({u:d<0?0:d==0?1:d==1?3:5,o:d,t:d<=0?'coral':d==1?'limon':'cielo',ic:'entregar',tit:'Entregar a '+n,sub:prods,
+    tag:d<0?'Atrasado '+plural(-d,'día','días'):d==0?'Es hoy':d==1?'Mañana':'En '+d+' días',a:'entregar',aTxt:'Entregué',id:p.id})}
+  const db=debe(p);
+  if(db>0){const dias=Math.max(0,-diasHasta(p.fecha));
+   L.push({u:p.entregado?2:4,o:-dias,t:p.entregado?'coral':'durazno',ic:'dinero',tit:n+' te debe '+fmt(db),
+    sub:(dias?'Pedido de hace '+plural(dias,'día','días'):'Pedido de hoy'),tag:p.entregado?'Ya entregado':'',a:'cobrar',aTxt:'Cobrar',id:p.id})}
+ });
+ D.productos.filter(p=>!p.encargo&&(p.stock||0)<=(p.minimo??2)).forEach(p=>{const st=p.stock||0;
+  L.push({u:st<=0?2:6,o:st,t:st<=0?'coral':'limon',ic:'caja',tit:st<=0?'Se agotó: '+p.nombre:(st==1?'Queda 1 de ':'Quedan '+st+' de ')+p.nombre,sub:'Haz o compra más',tag:'',a:'llegaron',aTxt:'Sumar',id:p.id,prod:true})});
+ return L.sort((a,b)=>a.u-b.u||a.o-b.o)}
+function recHtml(){
+ const L=recordatorios(),ver=REC_TODOS?L:L.slice(0,5);
+ const otros=D.pedidos.filter(p=>!p.entregado&&(!p.entrega||diasHasta(p.entrega)>7)).length;
+ return titulo('Recordatorios',L.length||null)
+  +(L.length?ver.map(r=>`<div class="rec t-${r.t} ${r.u<=2?'urg':''}"><button class="cu" data-a="${r.prod?'tab':'verPedido'}" data-id="${r.prod?'inventario':r.id}"><span class="ic">${ic(r.ic)}</span>
+   <span class="tx"><b>${esc(r.tit)}</b><span class="sm">${r.tag?`<em>${r.tag}</em> · `:''}${esc(r.sub)}</span></span></button>
+   <button class="mini" data-a="${r.a}" data-id="${r.id}">${r.aTxt}</button></div>`).join('')
+   +(L.length>5?`<button class="btn plano" data-a="recTodos">${REC_TODOS?'Ver menos':'Ver los '+L.length+' recordatorios'}</button>`:'')
+  :vacioHtml('check','Todo al día. No hay nada urgente.'))
+  +(otros?`<button class="link" data-a="tab" data-id="pedidos" style="border-top:0;margin-top:4px;padding-top:6px">${plural(otros,'pedido más','pedidos más')} por entregar sin apuro ${ic('der')}</button>`:'')}
 const titulo=(t,n)=>`<h2 class="tit d">${t}${n!=null?` <span class="n">${n}</span>`:''}</h2>`;
 const vacioHtml=(i,t)=>`<div class="vacio">${ic(i)}${t}</div>`;
 
@@ -547,7 +606,8 @@ function pInicio(){
   <button class="tile caramelo c-coral" data-a="mov" data-id="egr"><span class="ico">${ic('sale','l')}</span><b>Gasté dinero</b></button>
   <button class="tile caramelo c-lila" data-a="mov" data-id="inv"><span class="ico">${ic('brote','l')}</span><b>Invertí en el negocio</b></button>
  </div>
- <div class="card hero" style="margin-top:16px">
+ ${recHtml()}
+ <div class="card hero" style="margin-top:22px">
   <div class="et">Me quedó en ${MESES[n.getMonth()]}</div>
   <div class="big d ${c.G<0?'k-coral':''}">${fmt(c.G)}</div>
   <div class="duo">
@@ -556,16 +616,7 @@ function pInicio(){
   </div>
   <button class="link" data-a="tab" data-id="dinero">Ver el corte del mes ${ic('der')}</button>
  </div>
- ${deudoras.length?`<button class="card deben" data-a="verDeben">
-  <div class="fila"><div><div class="sm" style="font-weight:800">Me deben en total</div><div class="big d">${fmt(deudaTotal())}</div></div><span class="tag t-coral">${plural(deudoras.length,'pedido','pedidos')}</span></div>
-  <div class="link" style="color:var(--coral)">Ver quién me debe ${ic('der')}</div></button>`:''}
- ${titulo('Para entregar',pend.length||null)}
- ${pend.length?pend.slice(0,4).map(p=>`<button class="card" data-a="verPedido" data-id="${p.id}" style="padding:14px 16px">
-  <div class="fila" style="align-items:center"><div style="min-width:0"><div class="nm d" style="font-size:19px">${esc(nomCli(p))}</div><div class="sm">${esc(p.items.map(i=>i.cant+' '+i.nombre).join(', '))}</div></div>${p.entrega?entregaTag(p.entrega):ic('der')}</div></button>`).join('')
-  +(pend.length>4?`<button class="btn plano" data-a="tab" data-id="pedidos">Ver los ${pend.length} pedidos</button>`:'')
-  :vacioHtml('lazo','No tienes pedidos pendientes')}
- ${bajos.length?`${titulo('Se está acabando')}<div class="card">${bajos.map(p=>`<div class="fila" style="padding:7px 0;align-items:center"><b>${esc(p.nombre)}</b><span class="tag ${(p.stock||0)<=0?'t-coral':'t-limon'}">${(p.stock||0)<=0?'Agotado':'Quedan '+p.stock}</span></div>`).join('')}
-  <button class="btn plano" data-a="tab" data-id="inventario" style="margin-bottom:0">${ic('caja')}Ir al inventario</button></div>`:''}
+ ${deudoras.length?`<button class="link" data-a="verDeben" style="border-top:0;margin-top:0;color:var(--coral)">Me deben en total ${fmt(deudaTotal())} ${ic('der')}</button>`:''}
  ${enNube()?`${titulo('Mis datos')}<div class="card" id="nube-card">${nubeCard()}</div>`:''}
  ${titulo('Copia de seguridad')}
  <div class="card"><p class="sm" style="margin:0;line-height:1.5">${enNube()?'Tus datos ya se guardan solos en la nube. Si quieres, también puedes guardar una copia en un archivo.':'Todo se guarda en este teléfono.'} ${enNube()?'':' Guarda una copia cada semana y envíatela por WhatsApp o correo, por si se pierde o se daña el teléfono.'}${D.copiaAt?`<br>Última copia: <b style="color:var(--ink)">${fe(D.copiaAt)}</b>`:''}</p>
@@ -587,8 +638,8 @@ function instalarTxt(){
 
 /* ---------- PEDIDOS ---------- */
 function pPedidos(){
- const q=BUSCA_P.trim().toLowerCase();
- const base=D.pedidos.filter(p=>!q||nomCli(p).toLowerCase().includes(q)||p.items.some(i=>i.nombre.toLowerCase().includes(q))||(p.detalle||'').toLowerCase().includes(q));
+ const q=norm(BUSCA_P.trim());
+ const base=D.pedidos.filter(p=>!q||norm(nomCli(p)).includes(q)||p.items.some(i=>norm(i.nombre).includes(q))||norm(p.detalle).includes(q));
  const grupos={pend:base.filter(p=>!p.entregado),deben:base.filter(p=>debe(p)>0),ok:base.filter(p=>p.entregado),todos:base};
  let lista=grupos[FILTRO];
  lista=FILTRO=='pend'?lista.slice().sort((a,b)=>(a.entrega||'9').localeCompare(b.entrega||'9')):lista.slice().sort((a,b)=>(b.fecha+b.id).localeCompare(a.fecha+a.id));
@@ -636,6 +687,7 @@ function formPedido(p){
   <textarea class="in" name="detalle" placeholder="Ej: toalla rosada con el nombre Sofía">${esc(p?p.detalle:'')}</textarea></label>
  <label class="f">${paso(4,'¿Para cuándo es?',opc())}
   <input class="in" type="date" name="entrega" value="${esc(p?p.entrega:'')}"></label>
+ <div class="chips fechas">${[[0,'Hoy'],[1,'Mañana'],[3,'En 3 días'],[7,'En 1 semana']].map(([n,t])=>`<button type="button" class="chip" data-a="pfFecha" data-id="${n}">${t}</button>`).join('')}<button type="button" class="chip add" data-a="pfFecha" data-id="x">Sin fecha</button></div>
  ${p?`<div class="f">${paso(0,'Pagos')}<div class="nota">${ic('dinero')}<span>Ya pagó <b>${fmt(ya)}</b>. Para anotar otro pago usa el botón <b>Cobrar</b> del pedido.</span></div></div>`
  :`${campoDinero('abono',5,'¿Cuánto te pagó ya?','','Si no te ha pagado nada, déjalo vacío.')}
   <button type="button" class="mini" data-a="pfTodo" style="width:100%">${ic('check','s')}Me pagó todo</button>
@@ -654,11 +706,11 @@ function pfCli(){
  const inp=$('#pf-nom');inp.addEventListener('input',()=>{F.nombre=inp.value;pfRes()});pfRes();
 }
 function pfRes(){
- const q=F.nombre.trim().toLowerCase(),res=$('#pf-res'),nueva=$('#pf-nueva');
+ const q=norm(F.nombre.trim()),res=$('#pf-res'),nueva=$('#pf-nueva');
  const qd=q.replace(/\D/g,'');
- const m=q?D.clientas.filter(c=>c.nombre.toLowerCase().includes(q)||(qd&&(c.tel||'').replace(/\D/g,'').includes(qd))).slice(0,5):[];
+ const m=q?D.clientas.filter(c=>norm(c.nombre).includes(q)||(qd&&(c.tel||'').replace(/\D/g,'').includes(qd))).slice(0,5):[];
  res.innerHTML=m.map(c=>`<button type="button" data-a="pfCliSel" data-id="${c.id}">${ic('clienta')}<span>${esc(c.nombre)}<small>${c.tel?esc(c.tel):'Sin teléfono'}</small></span></button>`).join('');
- const exacta=D.clientas.some(c=>c.nombre.trim().toLowerCase()==q);
+ const exacta=D.clientas.some(c=>norm(c.nombre.trim())==q);
  if(q&&!exacta){if(!$('#pf-tel'))nueva.innerHTML=`<label class="f" style="margin-top:12px"><span style="font-size:15px">Es clienta nueva. ¿Su teléfono? <em>(opcional)</em></span>
    <input class="in" id="pf-tel" type="tel" inputmode="tel" placeholder="Ej: 0414 123 4567" value="${esc(F.tel)}"></label>`;
   $('#pf-tel').oninput=e=>F.tel=e.target.value}
@@ -696,7 +748,7 @@ function guardarPedido(fd){
  if(F.items.some(i=>!i.precio))return error('Ponle precio a todos los productos.');
  const total=sum(F.items,i=>i.precio*i.cant);
  let clienteId=F.clienteId;
- if(!clienteId&&F.nombre.trim()){const nom=F.nombre.trim(),ex=D.clientas.find(c=>c.nombre.trim().toLowerCase()==nom.toLowerCase());
+ if(!clienteId&&F.nombre.trim()){const nom=F.nombre.trim(),ex=D.clientas.find(c=>norm(c.nombre.trim())==norm(nom));
   if(ex)clienteId=ex.id;else{const c={id:uid(),nombre:nom,tel:F.tel.trim(),dir:'',ig:'',notas:''};D.clientas.push(c);clienteId=c.id}}
  if(F.viejo){const p=F.viejo;moverStock(p.items,+1);Object.assign(p,{clienteId,items:F.items,total,detalle,entrega});moverStock(p.items,-1);
   guardar();aviso('Pedido actualizado');}
@@ -727,8 +779,8 @@ function waPedido(id){const p=ped(id),c=cli(p.clienteId);if(!c||!c.tel)return;
 
 /* ---------- CLIENTAS ---------- */
 function pClientas(){
- const q=BUSCA_C.trim().toLowerCase();
- const l=D.clientas.filter(c=>!q||[c.nombre,c.tel,c.dir,c.ig,c.notas].some(x=>String(x||'').toLowerCase().includes(q))).sort((a,b)=>a.nombre.localeCompare(b.nombre));
+ const q=norm(BUSCA_C.trim());
+ const l=D.clientas.filter(c=>!q||[c.nombre,c.tel,c.dir,c.ig,c.notas].some(x=>norm(x).includes(q))).sort((a,b)=>a.nombre.localeCompare(b.nombre));
  $('#pg-clientas').innerHTML=`<button class="btn caramelo c-limon" data-a="editClienta">${ic('mas')}Clienta nueva</button>
  <div class="buscar">${ic('lupa')}<input id="bc" type="search" placeholder="Buscar por nombre o teléfono" value="${esc(BUSCA_C)}"></div>
  ${titulo('Mis clientas',D.clientas.length)}
@@ -759,8 +811,8 @@ function editClienta(id){const c=id?cli(id):{nombre:'',tel:'',dir:'',ig:'',notas
 
 /* ---------- INVENTARIO ---------- */
 function pInventario(){
- const q=BUSCA_I.trim().toLowerCase();
- const ps=D.productos.filter(p=>!q||p.nombre.toLowerCase().includes(q)||(p.cat||'').toLowerCase().includes(q));
+ const q=norm(BUSCA_I.trim());
+ const ps=D.productos.filter(p=>!q||norm(p.nombre).includes(q)||norm(p.cat).includes(q));
  const cont=D.productos.filter(p=>!p.encargo);
  const cats=[...new Set(ps.map(p=>p.cat||'Otros'))].sort((a,b)=>D.cats.indexOf(a)-D.cats.indexOf(b));
  $('#pg-inventario').innerHTML=`<button class="btn caramelo c-cielo" data-a="editProd">${ic('mas')}Producto nuevo</button>
@@ -1001,8 +1053,8 @@ function nubeCard(){const n=nPend();
   :['var(--menta)','nubeok','Todo está guardado en la nube. Aunque se pierda el teléfono, no se pierde nada.'];
  return`<div class="estado" style="--t:${t}"><span class="ic">${ic(i,'l')}</span><div style="min-width:0"><b>${NE.error&&!/conexión/.test(NE.error)?'Hay un problema':n?(navigator.onLine&&!NE.error?'Guardando…':'Sin internet'):'Todo guardado'}</b><div class="sm">${esc(txt)}</div></div></div>
   <div class="sm" style="margin-top:10px">Cuenta: <b style="color:var(--ink)">${esc(SES?SES.user.email:'')}</b></div>`}
-function mostrarLogin(){$('#login-logo').src=$('.logo img').src;$('#login').hidden=false;document.body.classList.add('lock')}
-function ocultarLogin(){$('#login').hidden=true;document.body.classList.remove('lock')}
+function mostrarLogin(){$('#login-logo').src=$('.logo img').src;$('#login').hidden=false;bloquear(true)}
+function ocultarLogin(){$('#login').hidden=true;if($('#ov').hidden)bloquear(false)}
 $('#login-f').addEventListener('submit',async e=>{e.preventDefault();
  const fd=new FormData(e.target),email=String(fd.get('email')).trim(),clave=String(fd.get('clave'));
  const err=t=>$('#login-err').innerHTML=`<div class="err">${ic('alerta')}<span>${esc(t)}</span></div>`;
@@ -1226,6 +1278,9 @@ const A={
  exportar:()=>exportar(),
  importar:()=>$('#archivo').click(),
  nubeInfo:()=>nubeInfo(),
+ recTodos:()=>{REC_TODOS=!REC_TODOS;pintar()},
+ pfFecha:n=>{const i=$('#sf [name=entrega]');if(n=='x'){i.value='';return}const d=new Date();d.setDate(d.getDate()+(+n));i.value=isoDe(d)},
+ verClave:(id,b)=>{const i=$('#login-f [name=clave]'),ver=i.type=='password';i.type=ver?'text':'password';b.textContent=ver?'Ocultar la contraseña':'Mostrar la contraseña'},
  nubeAhora:async()=>{await subir();await bajar();aviso(NE.error?NE.error:'Todo revisado',!!NE.error)},
  nubeElegir:(id,b)=>{$$('[data-a=nubeElegir]').forEach(x=>x.classList.toggle('on',x==b))},
  salir:()=>{if(nPend())return aviso('Espera: hay cambios sin subir. Conéctate a internet y espera a que diga Guardado.',true);
@@ -1235,6 +1290,9 @@ const A={
 };
 document.addEventListener('click',e=>{const b=e.target.closest('[data-a]');if(!b)return;
  const f=A[b.dataset.a];if(!f)return;e.preventDefault();f(b.dataset.id,b,e)});
+
+/* al volver a la app (por ejemplo al día siguiente) se recalculan los recordatorios */
+document.addEventListener('visibilitychange',()=>{if(document.visibilityState=='visible'&&$('#ov').hidden&&$('#login').hidden&&!document.activeElement.matches('input,textarea'))pintar()});
 
 /* ---------- arranque ---------- */
 cargar();irA('inicio');arrancarNube();

@@ -257,7 +257,7 @@ input[type=date].in{min-height:56px}
 .nota b{color:var(--ink)}
 
 /* ---------- menú inferior ---------- */
-nav{position:fixed;left:0;right:0;bottom:0;z-index:30;padding:0 10px calc(10px + env(safe-area-inset-bottom));pointer-events:none}
+nav{position:fixed;left:0;right:0;bottom:0;z-index:30;padding:22px 10px calc(10px + env(safe-area-inset-bottom));pointer-events:none;background:linear-gradient(rgba(19,16,21,0),var(--bg) 55%)}
 nav .barra{pointer-events:auto;display:flex;gap:2px;max-width:560px;margin:0 auto;padding:6px;border-radius:26px;background:rgba(16,13,18,.92);-webkit-backdrop-filter:blur(14px);backdrop-filter:blur(14px);border:1px solid var(--line);box-shadow:0 14px 40px -10px rgba(0,0,0,.7)}
 nav button{flex:1;min-width:0;border:0;background:transparent;color:var(--muted);border-radius:20px;padding:8px 2px 7px;font-size:11.5px;font-weight:800;display:flex;flex-direction:column;align-items:center;gap:3px;transition:background .2s,color .2s}
 nav button .i{width:24px;height:24px}
@@ -547,7 +547,7 @@ function pintar(){({inicio:pInicio,pedidos:pPedidos,inventario:pInventario,clien
 /* numerito rojo en Inicio y en el icono de la app: cosas urgentes */
 function globo(){const n=recordatorios().filter(r=>r.u<=2).length,b=$('#menu [data-id=inicio]');if(!b)return;
  let g=b.querySelector('.globo');if(n){if(!g){g=document.createElement('span');g.className='globo';b.appendChild(g)}g.textContent=n>9?'9+':n}else if(g)g.remove();
- try{if(n)navigator.setAppBadge&&navigator.setAppBadge(n);else navigator.clearAppBadge&&navigator.clearAppBadge()}catch(e){}}
+ try{const r=n?navigator.setAppBadge&&navigator.setAppBadge(n):navigator.clearAppBadge&&navigator.clearAppBadge();if(r&&r.catch)r.catch(()=>{})}catch(e){}}
 const norm=s=>String(s??'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
 
 /* ---------- RECORDATORIOS: salen solos de los pedidos y del inventario ---------- */
@@ -558,7 +558,7 @@ function recordatorios(){
   const n=nomCli(p),prods=p.items.map(i=>i.cant+' '+i.nombre).join(', ');
   if(!p.entregado&&p.entrega){const d=diasHasta(p.entrega);
    if(d<=7)L.push({u:d<0?0:d==0?1:d==1?3:5,o:d,t:d<=0?'coral':d==1?'limon':'cielo',ic:'entregar',tit:'Entregar a '+n,sub:prods,
-    tag:d<0?'Atrasado '+plural(-d,'día','días'):d==0?'Es hoy':d==1?'Mañana':'En '+d+' días',a:'entregar',aTxt:'Entregué',id:p.id})}
+    tag:d<0?'Atrasado '+plural(-d,'día','días'):d==0?'Es hoy':d==1?'Mañana':'En '+d+' días',a:'recEntregar',aTxt:'Entregué',id:p.id})}
   const db=debe(p);
   if(db>0){const dias=Math.max(0,-diasHasta(p.fecha));
    L.push({u:p.entregado?2:4,o:-dias,t:p.entregado?'coral':'durazno',ic:'dinero',tit:n+' te debe '+fmt(db),
@@ -1279,6 +1279,8 @@ const A={
  importar:()=>$('#archivo').click(),
  nubeInfo:()=>nubeInfo(),
  recTodos:()=>{REC_TODOS=!REC_TODOS;pintar()},
+ recEntregar:id=>{const p=ped(id);if(!p||p.entregado)return;
+  preguntar(`¿Ya le entregaste el pedido a <b>${esc(nomCli(p))}</b>?<br><br>${esc(p.items.map(i=>i.cant+' '+i.nombre).join(', '))}`,'Sí, ya lo entregué',()=>A.entregar(id),'c-menta')},
  pfFecha:n=>{const i=$('#sf [name=entrega]');if(n=='x'){i.value='';return}const d=new Date();d.setDate(d.getDate()+(+n));i.value=isoDe(d)},
  verClave:(id,b)=>{const i=$('#login-f [name=clave]'),ver=i.type=='password';i.type=ver?'text':'password';b.textContent=ver?'Ocultar la contraseña':'Mostrar la contraseña'},
  nubeAhora:async()=>{await subir();await bajar();aviso(NE.error?NE.error:'Todo revisado',!!NE.error)},

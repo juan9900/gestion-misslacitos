@@ -26,7 +26,7 @@ App web para el celular, de un solo archivo, para manejar el emprendimiento Miss
      ```sql
      insert into public.miembros (user_id, nombre) select id, email from auth.users where email = 'CORREO';
      ```
-- La app guarda primero en el teléfono y después sube a la nube. Sin internet, los cambios esperan en cola. Nada se borra de verdad en la nube: queda marcado como borrado (`borrado = true`).
+- La app guarda primero en el teléfono y después sube a la nube. Sin internet, los cambios esperan en cola. Nada se borra de verdad en la nube: queda marcado como borrado (`borrado = true`) y conserva su último contenido. Para recuperar algo borrado por error: `update public.registros set borrado = false where coleccion = '...' and id = '...';`
 - **Reportes PDF** (pantalla Dinero): del mes, del año, de una clienta y con todo. Se arman en el teléfono.
 
 ## Publicar en Netlify

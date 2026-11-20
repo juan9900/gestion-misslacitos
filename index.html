@@ -964,9 +964,12 @@ $('#archivo').addEventListener('change',e=>{const f=e.target.files[0];e.target.v
  const r=new FileReader();r.onload=()=>{let o;try{o=JSON.parse(r.result)}catch(err){return aviso('Ese archivo no es una copia de Miss Lacitoss',true)}
   if(!o||typeof o!='object'||!(o.v===2||Array.isArray(o.p)||Array.isArray(o.c)))return aviso('Ese archivo no es una copia de Miss Lacitoss',true);
   const n=migrar(o);
-  preguntar(`Vas a cambiar lo que tienes ahora por esta copia:<br><br>${plural(n.pedidos.length,'pedido','pedidos')} · ${plural(n.clientas.length,'clienta','clientas')} · ${plural(n.productos.length,'producto','productos')} · ${plural(n.movs.length,'movimiento','movimientos')}<br><br>Lo que tienes ahora se reemplaza.`,'Sí, recuperar copia',()=>{
+  preguntar(`${enNube()?'Vas a recuperar esta copia:':'Vas a cambiar lo que tienes ahora por esta copia:'}<br><br>${plural(n.pedidos.length,'pedido','pedidos')} · ${plural(n.clientas.length,'clienta','clientas')} · ${plural(n.productos.length,'producto','productos')} · ${plural(n.movs.length,'movimiento','movimientos')}<br><br>${enNube()?'Se <b>agrega</b> a lo que ya está en la nube. No se borra nada de lo que tienen los demás teléfonos.':'Lo que tienes ahora se reemplaza.'}`,'Sí, recuperar copia',()=>{
    try{localStorage.setItem(KEY+'_antes_de_recuperar',JSON.stringify(D))}catch(err){}
-   D=n;guardar();aviso('¡Copia recuperada!')},'c-cielo')};
+   if(enNube()){COLS.forEach(c=>(n[c]||[]).forEach(r=>{const i=D[c].findIndex(x=>x.id==r.id);if(i>-1)D[c][i]=r;else D[c].push(r)}));
+    (n.cats||[]).forEach(c=>{if(!D.cats.includes(c))D.cats.push(c)})}
+   else D=n;
+   guardar();aviso('¡Copia recuperada!')},'c-cielo')};
  r.readAsText(f)});
 
 /* =========================================================
@@ -991,7 +994,7 @@ function marcarCambios(){
  if(!enNube())return;
  const f=foto();let n=0;
  for(const k in f)if(N.ultimo[k]!==f[k]){N.pend[k]=f[k];N.ultimo[k]=f[k];n++}
- for(const k in N.ultimo)if(!(k in f)){N.pend[k]=null;delete N.ultimo[k];n++}
+ for(const k in N.ultimo)if(!(k in f)){N.pend[k]='!'+N.ultimo[k];delete N.ultimo[k];n++}   /* '!' = borrado, con su último contenido */
  if(n){nubeEscribir();programarSubida();estadoNube()}
 }
 let tSubir;
@@ -1001,7 +1004,7 @@ async function subir(){
  const keys=Object.keys(N.pend);if(!keys.length)return estadoNube();
  NE.subiendo=true;estadoNube();
  const lote=keys.slice(0,300),env={};
- const filas=lote.map(k=>{const v=N.pend[k],i=k.indexOf(':');env[k]=v;return{coleccion:k.slice(0,i),id:k.slice(i+1),data:v?JSON.parse(v):{},borrado:v===null}});
+ const filas=lote.map(k=>{const v=N.pend[k],i=k.indexOf(':'),del=v===null||v[0]=='!';env[k]=v;return{coleccion:k.slice(0,i),id:k.slice(i+1),data:v===null?{}:JSON.parse(del?v.slice(1):v),borrado:del}});
  let ok=false;
  try{const{error}=await sb.from('registros').upsert(filas,{onConflict:'coleccion,id'});if(error)throw error;
   lote.forEach(k=>{if(N.pend[k]===env[k])delete N.pend[k]});NE.error='';nubeEscribir();ok=true}
@@ -1027,12 +1030,12 @@ async function bajar(){
    if(!COLS.includes(r.coleccion))continue;
    const arr=D[r.coleccion],i=arr.findIndex(x=>x.id==r.id);
    if(v===null){if(i>-1){arr.splice(i,1);cambio=true}delete N.ultimo[k]}
-   else if(N.ultimo[k]!==v||i<0){if(i>-1)arr[i]=r.data;else arr.push(r.data);N.ultimo[k]=v;cambio=true}
+   else if(N.ultimo[k]!==v||i<0){if(i>-1){const o=arr[i];for(const kk in o)delete o[kk];Object.assign(o,r.data)}else arr.push(r.data);N.ultimo[k]=v;cambio=true}
   }
   if(data.length<1000)break;
  }
  nubeEscribir();
- if(cambio){guardar(true);if($('#ov').hidden)pintar()}
+ if(cambio){guardar(true);const ae=document.activeElement;if($('#ov').hidden&&!(ae&&ae.matches('input,textarea')))pintar();else globo()}
  estadoNube();
 }
 function traducirError(e){const m=String(e&&e.message||e||'');
@@ -1071,12 +1074,22 @@ async function iniciarCliente(){
  sb=window.supabase.createClient(CFG.supabaseUrl,CFG.supabaseKey,{auth:{persistSession:true,autoRefreshToken:true,storageKey:'ml-sesion'}});
  sb.auth.onAuthStateChange((ev,s)=>{if(s)SES=s;if(ev=='SIGNED_OUT'){SES=null;estadoNube();pintar();mostrarLogin()}});
 }
+let arrancando=false;
 async function arrancarNube(){
- if(!NUBE_ON)return;
+ if(!NUBE_ON||arrancando)return;
+ arrancando=true;try{await arrancarNube2()}finally{arrancando=false}
+}
+async function arrancarNube2(){
  nubeLeer();
- try{await iniciarCliente()}catch(e){NE.error='Sin conexión con la nube.';if(!N.uid)mostrarLogin();return}
- const{data}=await sb.auth.getSession();SES=data.session;
- if(!SES)return mostrarLogin();
+ try{if(!sb)await iniciarCliente()}catch(e){NE.error='Sin conexión con la nube.';if(!N.uid)mostrarLogin();return}
+ let data=null,error=null;
+ /* sin conexión la librería puede quedarse esperando: se le da un tiempo límite */
+ try{({data,error}=await Promise.race([sb.auth.getSession(),new Promise(r=>setTimeout(()=>r({data:null,error:new Error('tiempo')}),8000))]))}catch(e){error=e}
+ SES=(data&&data.session)||null;
+ if(!SES){
+  /* Teléfono ya enlazado pero sin conexión: se sigue trabajando aquí y todo sube al volver el internet */
+  if(N.uid&&(error||!navigator.onLine)){NE.error='Sin conexión con la nube.';return}
+  return mostrarLogin()}
  await conectado();
 }
 async function conectado(){
@@ -1105,10 +1118,10 @@ function nubeInfo(){
   <button type="button" class="btn caramelo c-cielo" data-a="nubeAhora">${ic('sync')}Revisar y guardar ahora</button>
   <button type="button" class="btn plano" data-a="salir" style="color:var(--coral)">${ic('salir')}Cerrar sesión</button>`,{sinBoton:true});
 }
-addEventListener('online',()=>{subir();bajar()});
+addEventListener('online',()=>{if(NUBE_ON&&!SES&&$('#login').hidden)arrancarNube();else{subir();bajar()}});
 addEventListener('offline',estadoNube);
 document.addEventListener('visibilitychange',()=>{if(document.visibilityState=='visible'){subir();bajar()}});
-setInterval(()=>{if(document.visibilityState=='visible'){subir();bajar()}},60000);
+setInterval(()=>{if(document.visibilityState!='visible')return;if(NUBE_ON&&!SES&&N.uid&&$('#login').hidden&&navigator.onLine)arrancarNube();else{subir();bajar()}},60000);
 
 /* =========================================================
    REPORTES EN PDF (se arman en el teléfono)
@@ -1294,7 +1307,7 @@ document.addEventListener('click',e=>{const b=e.target.closest('[data-a]');if(!b
  const f=A[b.dataset.a];if(!f)return;e.preventDefault();f(b.dataset.id,b,e)});
 
 /* al volver a la app (por ejemplo al día siguiente) se recalculan los recordatorios */
-document.addEventListener('visibilitychange',()=>{if(document.visibilityState=='visible'&&$('#ov').hidden&&$('#login').hidden&&!document.activeElement.matches('input,textarea'))pintar()});
+document.addEventListener('visibilitychange',()=>{if(document.visibilityState=='visible'&&$('#ov').hidden&&$('#login').hidden&&!(document.activeElement&&document.activeElement.matches('input,textarea')))pintar()});
 
 /* ---------- arranque ---------- */
 cargar();irA('inicio');arrancarNube();

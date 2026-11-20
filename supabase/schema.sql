@@ -16,7 +16,7 @@ create table if not exists public.miembros (
 --    Nunca se borran filas: se marcan con borrado = true, así ningún
 --    teléfono "resucita" algo que se borró en otro.
 create table if not exists public.registros (
-  coleccion       text not null check (coleccion in ('productos','clientas','pedidos','movs','ajustes')),
+  coleccion       text not null check (coleccion in ('productos','clientas','pedidos','movs','compras','ajustes')),
   id              text not null,
   data            jsonb not null default '{}'::jsonb,
   borrado         boolean not null default false,
@@ -25,6 +25,12 @@ create table if not exists public.registros (
   primary key (coleccion, id)
 );
 create index if not exists registros_actualizado_idx on public.registros (actualizado);
+
+-- Si la tabla ya existía de antes, esto actualiza la lista de colecciones permitidas
+-- (se agregó 'compras' para la lista de compras).
+alter table public.registros drop constraint if exists registros_coleccion_check;
+alter table public.registros add constraint registros_coleccion_check
+  check (coleccion in ('productos','clientas','pedidos','movs','compras','ajustes'));
 
 -- La hora la pone el servidor (no el teléfono), para sincronizar bien.
 create or replace function public.ml_tocar() returns trigger

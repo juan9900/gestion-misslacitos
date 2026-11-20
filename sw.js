@@ -1,5 +1,5 @@
 // Permite abrir la app sin internet. Cambia VERSION cuando publiques cambios.
-const VERSION = 'ml-v6';
+const VERSION = 'ml-v7';
 const BASE = ['./', 'index.html', 'config.js', 'manifest.webmanifest', 'icon-180.png', 'icon-192.png', 'icon-512.png'];
 // Librerías y fuentes (con versión fija): se guardan la primera vez que se usan.
 const CDN = [

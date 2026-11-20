@@ -290,6 +290,18 @@ nav button{position:relative}
 .cerrarx{flex:none;width:44px;height:44px;border-radius:14px;border:1.5px solid var(--line2);background:var(--card);color:var(--muted);display:flex;align-items:center;justify-content:center}
 .chips.fechas .chip{min-height:40px;padding:6px 13px;font-size:14px}
 
+/* ---------- lista de compras ---------- */
+.cp-add{display:flex;gap:8px;align-items:stretch}
+.cp-add .in{margin:0;flex:1;min-width:0;background:var(--card)}
+.cp-add button{flex:none;width:56px;border-radius:16px}
+.cp-add button::after{inset:4px;border-radius:12px}
+.cp{display:flex;align-items:center;gap:6px;background:var(--card);border:1px solid var(--line);border-radius:18px;padding:5px;margin:8px 0}
+.cp .chk{flex:none;width:46px;height:46px;border-radius:14px;border:2px dashed var(--line2);background:transparent;color:transparent;display:flex;align-items:center;justify-content:center}
+.cp .txt{flex:1;min-width:0;overflow-wrap:anywhere;font-weight:700;padding:4px 2px}
+.cp .x{flex:none;width:42px;height:42px;border:0;border-radius:12px;background:transparent;color:var(--muted);display:flex;align-items:center;justify-content:center}
+.cp.h .chk{border-style:solid;border-color:var(--menta);background:var(--menta);color:var(--tinta)}
+.cp.h .txt{text-decoration:line-through;color:var(--muted);font-weight:600}
+
 /* ---------- nube ---------- */
 .nube{margin-left:auto;flex:none;display:inline-flex;align-items:center;gap:6px;min-height:40px;padding:6px 12px;border-radius:30px;border:1.5px solid var(--line2);background:var(--card);color:var(--t,var(--muted));font-weight:800;font-size:13px}
 .nube .i{width:20px;height:20px}
@@ -459,7 +471,7 @@ function telWa(t){let d=String(t||'').replace(/\D/g,'');if(!d)return'';
 
 /* ---------- datos ---------- */
 let D;
-function vacio(){return{v:2,productos:[],clientas:[],pedidos:[],movs:[],cats:[...CATS],copiaAt:''}}
+function vacio(){return{v:2,productos:[],clientas:[],pedidos:[],movs:[],compras:[],cats:[...CATS],copiaAt:''}}
 function migrar(o){
  if(!o||typeof o!=='object')return vacio();
  if(o.v===2){const n=vacio();for(const k in n)if(o[k]===undefined)o[k]=n[k];return o}
@@ -577,6 +589,17 @@ function recHtml(){
    +(L.length>5?`<button class="btn plano" data-a="recTodos">${REC_TODOS?'Ver menos':'Ver los '+L.length+' recordatorios'}</button>`:'')
   :vacioHtml('check','Todo al día. No hay nada urgente.'))
   +(otros?`<button class="link" data-a="tab" data-id="pedidos" style="border-top:0;margin-top:4px;padding-top:6px">${plural(otros,'pedido más','pedidos más')} por entregar sin apuro ${ic('der')}</button>`:'')}
+/* ---------- LISTA DE COMPRAS ---------- */
+function comprasHtml(){
+ const pend=D.compras.filter(c=>!c.hecho),hechas=D.compras.filter(c=>c.hecho);
+ const fila=c=>`<div class="cp ${c.hecho?'h':''}"><button class="chk" data-a="compraOk" data-id="${c.id}" aria-label="${c.hecho?'Marcar como no comprado':'Marcar como comprado'}">${ic('check')}</button>
+  <span class="txt">${esc(c.texto)}</span><button class="x" data-a="compraDel" data-id="${c.id}" aria-label="Quitar de la lista">${ic('cerrar','s')}</button></div>`;
+ return titulo('Por comprar',pend.length||null)
+  +`<div class="cp-add"><input class="in" id="cp-in" placeholder="Ej: cinta rosada, hilo, pistola de silicón" autocomplete="off" enterkeyhint="done" maxlength="120">
+   <button class="caramelo c-lila" data-a="compraAdd" aria-label="Agregar a la lista">${ic('mas')}</button></div>`
+  +pend.map(fila).join('')+hechas.map(fila).join('')
+  +(pend.length?`<button class="btn plano" data-a="compraWa" style="color:#5fdc8f">${ic('wa')}Enviar la lista por WhatsApp</button>`:'')
+  +(hechas.length?`<button class="link" data-a="compraLimpiar" style="border-top:0;margin-top:0;padding-top:4px;color:var(--muted)">Quitar lo que ya compré (${hechas.length}) ${ic('basura','s')}</button>`:'')}
 const titulo=(t,n)=>`<h2 class="tit d">${t}${n!=null?` <span class="n">${n}</span>`:''}</h2>`;
 const vacioHtml=(i,t)=>`<div class="vacio">${ic(i)}${t}</div>`;
 
@@ -607,6 +630,7 @@ function pInicio(){
   <button class="tile caramelo c-lila" data-a="mov" data-id="inv"><span class="ico">${ic('brote','l')}</span><b>Invertí en el negocio</b></button>
  </div>
  ${recHtml()}
+ ${comprasHtml()}
  <div class="card hero" style="margin-top:22px">
   <div class="et">Me quedó en ${MESES[n.getMonth()]}</div>
   <div class="big d ${c.G<0?'k-coral':''}">${fmt(c.G)}</div>
@@ -980,7 +1004,7 @@ const CFG=window.ML_CONFIG||{};
 const NUBE_ON=!!(CFG.supabaseUrl&&CFG.supabaseKey);
 const LIB_SUPA='https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js';
 const LIB_PDF=['https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js','https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js'];
-const NKEY=KEY+'_nube',COLS=['productos','clientas','pedidos','movs'];
+const NKEY=KEY+'_nube',COLS=['productos','clientas','pedidos','movs','compras'];
 let sb=null,SES=null,N={uid:'',desde:'',ultimo:{},pend:{}},NE={error:'',subiendo:false};
 const enNube=()=>NUBE_ON&&!!SES&&N.uid===SES.user.id;
 const nPend=()=>Object.keys(N.pend).length;
@@ -1292,6 +1316,18 @@ const A={
  importar:()=>$('#archivo').click(),
  nubeInfo:()=>nubeInfo(),
  recTodos:()=>{REC_TODOS=!REC_TODOS;pintar()},
+ compraAdd:()=>{const i=$('#cp-in'),t=i.value.trim();if(!t)return i.focus();
+  D.compras.push({id:uid(),texto:t,hecho:false,fecha:hoy()});guardar();const n=$('#cp-in');if(n)n.focus()},
+ compraOk:id=>{const c=D.compras.find(x=>x.id==id);if(!c)return;
+  if(c.hecho){c.hecho=false;return guardar()}
+  hoja('¿Ya lo compraste?',`<div class="nota">${ic('bolsa')}<span><b>${esc(c.texto)}</b></span></div>
+   ${campoDinero('monto',0,'¿Cuánto te costó? <em>(opcional)</em>','','Si lo pones, se anota solo como inversión.')}`,
+   {ok:'Sí, ya lo compré',c:'c-lila',onOk:fd=>{const m=aCent(fd.get('monto'));c.hecho=true;
+    if(m)D.movs.push({id:uid(),tipo:'inv',concepto:c.texto,cat:'Materiales',monto:m,fecha:hoy(),pedidoId:''});
+    guardar();aviso(m?'Comprado y anotado como inversión':'¡Comprado!')}})},
+ compraDel:id=>{D.compras=D.compras.filter(x=>x.id!=id);guardar()},
+ compraLimpiar:()=>{D.compras=D.compras.filter(x=>!x.hecho);guardar()},
+ compraWa:()=>window.open('https://wa.me/?text='+encodeURIComponent('🛒 *Lista de compras · Miss Lacitoss*\n\n'+D.compras.filter(x=>!x.hecho).map(x=>'▫️ '+x.texto).join('\n')),'_blank'),
  recEntregar:id=>{const p=ped(id);if(!p||p.entregado)return;
   preguntar(`¿Ya le entregaste el pedido a <b>${esc(nomCli(p))}</b>?<br><br>${esc(p.items.map(i=>i.cant+' '+i.nombre).join(', '))}`,'Sí, ya lo entregué',()=>A.entregar(id),'c-menta')},
  pfFecha:n=>{const i=$('#sf [name=entrega]');if(n=='x'){i.value='';return}const d=new Date();d.setDate(d.getDate()+(+n));i.value=isoDe(d)},
@@ -1308,6 +1344,8 @@ document.addEventListener('click',e=>{const b=e.target.closest('[data-a]');if(!b
 
 /* al volver a la app (por ejemplo al día siguiente) se recalculan los recordatorios */
 document.addEventListener('visibilitychange',()=>{if(document.visibilityState=='visible'&&$('#ov').hidden&&$('#login').hidden&&!(document.activeElement&&document.activeElement.matches('input,textarea')))pintar()});
+
+document.addEventListener('keydown',e=>{if(e.key=='Enter'&&e.target.id=='cp-in'){e.preventDefault();A.compraAdd()}});
 
 /* ---------- arranque ---------- */
 cargar();irA('inicio');arrancarNube();

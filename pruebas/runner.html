@@ -1,0 +1,231 @@
+<!doctype html><meta charset="utf-8"><title>Pruebas Miss Lacitoss</title>
+<body style="margin:0;background:#333;color:#eee;font:14px monospace;display:flex;gap:12px;padding:8px">
+<iframe id="f" style="width:390px;height:700px;border:0;background:#111"></iframe>
+<pre id="out" style="flex:1;white-space:pre-wrap;margin:0"></pre>
+<script>
+const fr=document.getElementById('f');let w,d;
+const RES=[];window.RES=RES;window.FIN=false;
+const wait=ms=>new Promise(r=>setTimeout(r,ms));
+const log=t=>{document.getElementById('out').textContent+=t+'\n'};
+function ok(nombre,cond,extra){RES.push({ok:!!cond,nombre,extra:cond?undefined:extra});log((cond?'OK   ':'FALLA ')+nombre+(cond?'':'  -> '+JSON.stringify(extra)))}
+const srv=()=>JSON.parse(localStorage.getItem('FAKE_SERVER')||'{"rows":{},"clock":0,"reject":[],"down":false}');
+const setSrv=f=>{const s=srv();f(s);localStorage.setItem('FAKE_SERVER',JSON.stringify(s))};
+const APP=['negocio','negocio_nube','ml-sesion','negocio_antes_de_nube','negocio_antes_de_recuperar','negocio_v1_respaldo'];
+let actual='A';
+function guardarTel(n){const o={};APP.forEach(k=>{const v=localStorage.getItem(k);if(v!==null)o[k]=v});localStorage.setItem('TEL_'+n,JSON.stringify(o))}
+function cargarTel(n){APP.forEach(k=>localStorage.removeItem(k));const o=JSON.parse(localStorage.getItem('TEL_'+n)||'{}');for(const k in o)localStorage.setItem(k,o[k])}
+async function abrir(){await new Promise(r=>{fr.onload=r;fr.src='index.html?'+Date.now()});w=fr.contentWindow;d=w.document;await wait(500)}
+async function telefono(n){guardarTel(actual);cargarTel(n);actual=n;await abrir()}
+const E=c=>w.eval(c);
+const q=s=>d.querySelector(s);
+const clic=s=>{const el=typeof s=='string'?q(s):s;if(!el)throw new Error('no existe '+s);el.dispatchEvent(new w.MouseEvent('click',{bubbles:true}))};
+const pon=(s,v)=>{const el=q(s);if(!el)throw new Error('no existe '+s);el.value=v;el.dispatchEvent(new w.Event('input',{bubbles:true}))};
+const enviar=()=>q('#sf').requestSubmit();
+const errTxt=()=>(q('#sf-err')||{}).textContent||'';
+const hojaAbierta=()=>!q('#ov').hidden;
+async function entrar(email='a@p.com'){pon('#login-f [name=email]',email);pon('#login-f [name=clave]','ok');q('#login-f').requestSubmit();await wait(500)}
+async function sync(){await E('subir()');await E('bajar()');await wait(50)}
+const filas=(col)=>Object.values(srv().rows).filter(r=>r.coleccion==col);
+
+async function T(nombre,fn){try{await fn()}catch(e){ok(nombre+' (excepción)',false,String(e&&e.stack||e))}}
+
+(async()=>{
+ /* Seguro: estas pruebas BORRAN el almacenamiento local. Solo corren en la computadora, nunca en el sitio real. */
+ if(!['127.0.0.1','localhost'].includes(location.hostname)){log('Las pruebas solo se ejecutan en 127.0.0.1');return}
+ Object.keys(localStorage).forEach(k=>localStorage.removeItem(k));
+ await abrir();
+
+ await T('1 primer inicio de sesión',async()=>{
+  ok('1a sin sesión muestra el inicio de sesión',!q('#login').hidden);
+  pon('#login-f [name=email]','a@p.com');pon('#login-f [name=clave]','mala');q('#login-f').requestSubmit();await wait(200);
+  ok('1b contraseña mala da mensaje claro',/no coinciden/.test(q('#login-err').textContent),q('#login-err').textContent);
+  await entrar();
+  ok('1c entra y queda enlazado',q('#login').hidden&&E('enNube()'),{login:q('#login').hidden});
+ });
+
+ await T('2 crear datos en A y subir',async()=>{
+  E('A.editClienta()');pon('#sf [name=nombre]','María Pérez');pon('#sf [name=tel]','0414 123 4567');enviar();
+  E('A.editProd()');pon('#sf [name=nombre]','Lazo');clic('[data-a=pcCat][data-id=Lazos]');pon('#sf [name=precio]','3,75');pon('#sf [name=stock]','5');enviar();
+  E('A.nuevoPedido()');pon('#pf-nom','María Pérez');clic('#pf-res [data-a=pfCliSel]');clic('#pf-prods [data-a=pfAdd]');clic('[data-a=pfMas]');
+  ok('2a total con centavos',q('#pf-total').textContent=='$7,50',q('#pf-total').textContent);
+  pon('#sf [name=abono]','2,5');enviar();
+  ok('2b pedido guardado',E('D.pedidos.length')==1&&!hojaAbierta(),errTxt());
+  ok('2c stock baja de 5 a 3',E('D.productos[0].stock')==3);
+  ok('2d debe 5,00',E('debe(D.pedidos[0])')==500);
+  pon('#cp-in','Cinta rosada');clic('[data-a=compraAdd]');pon('#cp-in','Hilo');clic('[data-a=compraAdd]');
+  ok('2e dos compras anotadas',E('D.compras.length')==2);
+  await wait(1500);await sync();
+  ok('2f todo subió',E('nPend()')==0&&filas('clientas').length==1&&filas('pedidos').length==1&&filas('compras').length==2&&filas('movs').length==1&&filas('productos').length==1,{pend:E('nPend()'),err:E('NE.error'),n:Object.keys(srv().rows)});
+  ok('2g indicador dice Guardado',q('#nube').textContent=='Guardado',q('#nube').textContent);
+ });
+
+ await T('3 segundo teléfono recibe todo',async()=>{
+  await telefono('B');
+  ok('3a B empieza en el inicio de sesión',!q('#login').hidden);
+  await entrar();await wait(300);
+  ok('3b B recibió los datos',E('D.clientas.length')==1&&E('D.pedidos.length')==1&&E('D.compras.length')==2&&E('D.productos[0].stock')==3,E('JSON.stringify({c:D.clientas.length,p:D.pedidos.length,co:D.compras.length})'));
+  ok('3c B no vuelve a subir lo recibido',E('nPend()')==0);
+  ok('3d recordatorio de deuda aparece en B',E('recordatorios().some(r=>/te debe/.test(r.tit))'));
+ });
+
+ await T('4 cambios de B llegan a A; lo borrado no vuelve',async()=>{
+  clic('.cp [data-a=compraOk]');pon('#sf [name=monto]','4,50');enviar();
+  ok('4a compra marcada y anotada como inversión',E('D.compras.filter(c=>c.hecho).length')==1&&E('D.movs.some(m=>m.tipo=="inv"&&m.monto==450)'));
+  const idHilo=E('D.compras.find(c=>!c.hecho).id');clic('.cp:not(.h) [data-a=compraDel]');
+  await wait(1500);await sync();
+  const t=srv().rows['compras:'+idHilo];
+  ok('4b lo borrado queda marcado y conserva su contenido',t&&t.borrado&&t.data&&t.data.texto,t);
+  await telefono('A');await wait(400);await sync();
+  ok('4c A ve la compra hecha y no ve la borrada',E('D.compras.length')==1&&E('D.compras[0].hecho'),E('JSON.stringify(D.compras)'));
+  ok('4d A recibió la inversión',E('D.movs.some(m=>m.tipo=="inv")'));
+  await sync();
+  ok('4e A no resucita lo borrado',srv().rows['compras:'+idHilo].borrado&&E('nPend()')==0);
+ });
+
+ await T('5 sin internet',async()=>{
+  setSrv(s=>s.down=true);
+  const ses=JSON.parse(localStorage.getItem('ml-sesion'));ses.expirada=true;localStorage.setItem('ml-sesion',JSON.stringify(ses));
+  await abrir();await wait(300);
+  ok('5a sin internet y sesión vencida NO pide iniciar sesión',q('#login').hidden);
+  pon('#cp-in','Comprado sin internet');clic('[data-a=compraAdd]');
+  ok('5b se puede anotar sin internet',E('D.compras.length')==2&&JSON.parse(localStorage.getItem('negocio')).compras.length==2);
+  setSrv(s=>s.down=false);delete ses.expirada;localStorage.setItem('ml-sesion',JSON.stringify(ses));
+  w.dispatchEvent(new w.Event('online'));await wait(1200);await sync();
+  ok('5c al volver el internet sube solo',filas('compras').some(r=>r.data.texto=='Comprado sin internet'&&!r.borrado)&&E('nPend()')==0,{pend:E('nPend()'),ses:E('!!SES'),err:E('NE.error')});
+ });
+
+ await T('6 la nube rechaza un registro',async()=>{
+  pon('#cp-in','Rechazado');clic('[data-a=compraAdd]');const idMal=E('D.compras.at(-1).id');setSrv(s=>s.reject=[idMal]);
+  pon('#cp-in','Aceptado');clic('[data-a=compraAdd]');
+  await wait(1500);await sync();
+  ok('6a el registro bueno sube aunque otro sea rechazado',filas('compras').some(r=>r.data.texto=='Aceptado'),Object.keys(srv().rows));
+  ok('6b el rechazado se aparta y no traba la cola',E('nPend()')==0&&E('Object.keys(N.mal).length')==1,{pend:E('nPend()'),mal:E('JSON.stringify(N.mal)')});
+  ok('6c avisa del problema',/no aceptó/.test(E('NE.error')),E('NE.error'));
+  ok('6d el dato sigue en el teléfono',E('D.compras.some(c=>c.texto=="Rechazado")'));
+  setSrv(s=>s.reject=[]);await abrir();await wait(600);await sync();
+  ok('6e al abrir de nuevo se reintenta y sube',filas('compras').some(r=>r.data.texto=='Rechazado')&&E('Object.keys(N.mal).length')==0&&!E('NE.error'),{mal:E('JSON.stringify(N.mal)'),err:E('NE.error')});
+ });
+
+ await T('7 recuperar una copia en teléfono enlazado y sin conexión',async()=>{
+  const antes=E('D.clientas.length'),pedAntes=E('D.pedidos.length');
+  E('SES=null');   /* como al abrir sin internet */
+  const copia={v:2,productos:[],clientas:[{id:'vieja',nombre:'Clienta de la copia',tel:'',dir:'',ig:'',notas:''}],pedidos:[],movs:[],compras:[],cats:['Lazos'],copiaAt:''};
+  const file=new w.File([JSON.stringify(copia)],'copia.json',{type:'application/json'});const dt=new w.DataTransfer();dt.items.add(file);
+  q('#archivo').files=dt.files;q('#archivo').dispatchEvent(new w.Event('change'));await wait(300);
+  ok('7a avisa que se agrega',/agrega/.test(q('#sheet-b').textContent),q('#sheet-b').textContent.slice(0,200));
+  enviar();await wait(100);
+  ok('7b suma sin borrar',E('D.clientas.length')==antes+1&&E('D.pedidos.length')==pedAntes,{c:E('D.clientas.length'),p:E('D.pedidos.length')});
+  await abrir();await wait(500);await wait(1300);await sync();
+  ok('7c nada quedó borrado en la nube por la copia',filas('pedidos').every(r=>!r.borrado)&&filas('clientas').filter(r=>!r.borrado).length==antes+1,filas('clientas').map(r=>r.id+':'+r.borrado));
+ });
+
+ await T('8 edición abierta mientras llega un cambio de otro teléfono',async()=>{
+  const id=E('D.clientas.find(c=>c.nombre=="María Pérez").id');
+  E(`A.editClienta('${id}')`);
+  setSrv(s=>{const r=s.rows['clientas:'+id];r.data.notas='nota del otro teléfono';s.clock++;r.actualizado=new Date(1.8e12+s.clock*1000).toISOString()});
+  await E('bajar()');
+  ok('8a el formulario sigue abierto',hojaAbierta());
+  pon('#sf [name=dir]','Dirección nueva');enviar();
+  ok('8b lo editado se guarda en el registro real',E(`D.clientas.find(c=>c.id=='${id}').dir`)=='Dirección nueva',E(`JSON.stringify(D.clientas.find(c=>c.id=='${id}'))`));
+  await wait(1500);await sync();
+  ok('8c y sube a la nube',srv().rows['clientas:'+id].data.dir=='Dirección nueva');
+ });
+
+ await T('9 buscador no pierde el foco al llegar datos',async()=>{
+  E("irA('clientas')");const b=q('#bc');b.focus();pon('#bc','mar');
+  const idp=E('D.productos[0].id');setSrv(s=>{const r=s.rows['productos:'+idp];r.data.stock=9;s.clock++;r.actualizado=new Date(1.8e12+s.clock*1000).toISOString()});
+  await E('bajar()');
+  ok('9a sigue escribiendo en el buscador',d.activeElement&&d.activeElement.id=='bc'&&q('#bc').value=='mar',d.activeElement&&d.activeElement.id);
+  ok('9b el dato sí llegó',E('D.productos[0].stock')==9);
+  ok('9c búsqueda sin acentos',d.querySelectorAll('#pg-clientas article').length==1);
+  E("BUSCA_C='';irA('inicio')");
+ });
+
+ await T('10 recordatorios y Entregué con confirmación',async()=>{
+  const idp=E('D.pedidos[0].id');E(`ped('${idp}').entrega=hoy();guardar()`);
+  ok('10a aparece la entrega de hoy',E('recordatorios().some(r=>r.tag=="Es hoy")'));
+  ok('10b numerito de urgentes',q('.globo')&&+q('.globo').textContent>=1,q('.globo')&&q('.globo').textContent);
+  clic('.rec [data-a=recEntregar]');
+  ok('10c pide confirmación y no marca todavía',hojaAbierta()&&!E(`ped('${idp}').entregado`));
+  enviar();
+  ok('10d al confirmar queda entregado',E(`ped('${idp}').entregado`)===true&&!hojaAbierta());
+  ok('10e sigue recordando que debe',E('recordatorios().some(r=>r.tag=="Ya entregado")'));
+ });
+
+ await T('11 validaciones',async()=>{
+  const idp=E('D.pedidos[0].id');
+  E(`cobrar('${idp}')`);pon('#sf [name=monto]','999');enviar();
+  ok('11a no deja cobrar más de lo que debe',hojaAbierta()&&/Solo te debe/.test(errTxt()),errTxt());
+  pon('#sf [name=monto]','5');enviar();
+  ok('11b cobro exacto deja la deuda en cero',!hojaAbierta()&&E(`debe(ped('${idp}'))`)==0);
+  E("formMov('egr',null)");pon('#sf [name=monto]','99999999999');clic('#mv-cats .chip');enviar();
+  ok('11c monto absurdo rechazado',hojaAbierta()&&/demasiado alto/.test(errTxt()),errTxt());
+  pon('#sf [name=monto]','0');enviar();ok('11d monto cero rechazado',hojaAbierta()&&/cuánto fue/.test(errTxt()),errTxt());
+  pon('#sf [name=monto]','-3,5');enviar();ok('11e el signo menos se ignora y guarda 3,50',!hojaAbierta()&&E('D.movs.at(-1).monto')==350,E('D.movs.at(-1).monto'));
+  E("formMov('egr',null)");pon('#sf [name=monto]','abc');enviar();ok('11f letras en el monto rechazadas',hojaAbierta());
+  pon('#sf [name=monto]','1.250,50');clic('#mv-cats .chip');q('#sf [name=fecha]').value='';enviar();
+  ok('11g fecha vacía usa hoy',!hojaAbierta()&&E('D.movs.at(-1).monto')==125050&&E('D.movs.at(-1).fecha')==E('hoy()'),errTxt());
+  E('A.editClienta()');pon('#sf [name=nombre]','maria perez');enviar();
+  ok('11h clienta repetida rechazada',hojaAbierta()&&/Ya tienes/.test(errTxt()),errTxt());
+  pon('#sf [name=nombre]','Otra');pon('#sf [name=tel]','123');enviar();
+  ok('11i teléfono corto rechazado',hojaAbierta()&&/faltan números/.test(errTxt()),errTxt());
+  pon('#sf [name=tel]','');enviar();ok('11j clienta sin teléfono permitida',!hojaAbierta());
+  E('A.nuevoPedido()');enviar();ok('11k pedido sin productos rechazado',hojaAbierta()&&/al menos un producto/.test(errTxt()),errTxt());
+  clic('[data-a=pfAddOtro]');enviar();ok('11l producto sin nombre rechazado',/nombre del producto/.test(errTxt()),errTxt());
+  pon('#pf-items [data-k=nombre]','Collar');enviar();ok('11m producto sin precio rechazado',/precio/.test(errTxt()),errTxt());
+  pon('#pf-items [data-k=precio]','4');pon('#sf [name=abono]','10');enviar();ok('11n abono mayor al total rechazado',hojaAbierta()&&/Pagó más/.test(errTxt()),errTxt());
+  pon('#sf [name=abono]','');q('#sf [name=fecha]').value='2099-01-01';enviar();ok('11o fecha de pedido futura rechazada',hojaAbierta()&&/futuro/.test(errTxt()),errTxt());
+  q('#sf [name=fecha]').value='2026-10-15';enviar();
+  ok('11p pedido antiguo queda con su fecha y sin clienta es venta rápida',!hojaAbierta()&&E('D.pedidos.at(-1).fecha')=='2026-10-15'&&E('nomCli(D.pedidos.at(-1))')=='Venta rápida',errTxt());
+  ok('11q el corte de octubre lo cuenta',E("corte('2026-10').P.length")==1);
+  E('A.editProd()');pon('#sf [name=nombre]','X');clic('[data-a=pcCat]');pon('#sf [name=precio]','2');pon('#sf [name=stock]','-7');enviar();
+  ok('11r stock negativo se guarda como 0',!hojaAbierta()&&E('D.productos.at(-1).stock')==0,errTxt());
+  ok('11s texto con HTML no se interpreta',(()=>{pon('#cp-in','<img src=x onerror=alert(1)>');clic('[data-a=compraAdd]');return !q('.cp img')&&[...d.querySelectorAll('.cp .txt')].some(x=>/<img/.test(x.textContent))})());
+  E("A.cobrar('no-existe')");ok('11t acción sobre algo que ya no existe no rompe la app',!hojaAbierta());
+  E("irA('dinero')");ok('11u pantalla Dinero pinta sin errores',q('#pg-dinero').children.length>5);
+  E("irA('pedidos');irA('inventario');irA('clientas');irA('inicio')");ok('11v todas las pantallas pintan',q('#pg-inicio').children.length>3);
+ });
+
+ await T('12 borrar pedido devuelve stock y borra sus pagos',async()=>{
+  const idp=E('D.pedidos[0].id'),st=E('D.productos[0].stock'),pagos=E(`D.movs.filter(m=>m.pedidoId=='${idp}').length`);
+  E(`A.borrarPedido('${idp}')`);enviar();
+  ok('12a pedido borrado',!E(`ped('${idp}')`));
+  ok('12b stock devuelto',E('D.productos[0].stock')==st+2,{antes:st,ahora:E('D.productos[0].stock')});
+  ok('12c pagos del pedido borrados',pagos>0&&E(`D.movs.filter(m=>m.pedidoId=='${idp}').length`)==0);
+ });
+
+ await T('13 cerrar sesión',async()=>{
+  await wait(1500);await sync();
+  ok('13a sin pendientes antes de salir',E('nPend()')==0,E('NE.error'));
+  E('A.salir()');enviar();await wait(300);
+  ok('13b al salir muestra el inicio de sesión',!q('#login').hidden);
+  setSrv(s=>s.down=true);await abrir();await wait(300);
+  ok('13c tras cerrar sesión, sin internet también pide entrar',!q('#login').hidden);
+  setSrv(s=>s.down=false);await abrir();await wait(300);await entrar();await wait(400);
+  ok('13d al volver a entrar conserva los datos y no pregunta nada',q('#login').hidden&&!hojaAbierta()&&E('D.clientas.length')>=2,{hoja:hojaAbierta()});
+ });
+
+ await T('14 teléfono con datos propios entra a una nube con datos',async()=>{
+  await telefono('C');
+  localStorage.setItem('negocio',JSON.stringify({v:2,productos:[],clientas:[{id:'solo-c',nombre:'Solo en C',tel:'',dir:'',ig:'',notas:''}],pedidos:[],movs:[],cats:['Lazos'],copiaAt:''}));
+  await abrir();await entrar();await wait(400);
+  ok('14a pregunta qué hacer',hojaAbierta()&&/Ya hay datos en la nube/.test(q('#sheet-t').textContent),q('#sheet-t').textContent);
+  clic('[data-a=nubeElegir][data-id=juntar]');enviar();await wait(1800);await sync();
+  ok('14b juntar conserva lo de los dos lados',E('D.clientas.some(c=>c.id=="solo-c")')&&E('D.clientas.length')>=3&&filas('clientas').some(r=>r.id=='solo-c'),E('D.clientas.map(c=>c.nombre)'));
+  ok('14c datos viejos sin lista de compras no rompen',Array.isArray(E('D.compras')));
+ });
+
+ await T('15 reportes PDF',async()=>{
+  const lib=await Promise.race([E('(async()=>{for(const u of LIB_PDF)await cargarScript(u);return true})()'),wait(15000).then(()=>false)]).catch(()=>false);
+  if(!lib){ok('15 PDF (sin internet para la librería, no se probó)',true);return}
+  w._pdfs=[];const c0=w.HTMLAnchorElement.prototype.click;w.HTMLAnchorElement.prototype.click=function(){if(this.download){w._pdfs.push(this.download);return}return c0.call(this)};
+  w.navigator.canShare=undefined;
+  await E('repMes()');await E('repAnio()');await E('repTodo()');await E(`repCli(D.clientas[0].id)`);
+  ok('15a se generan los cuatro PDF',w._pdfs.length==4,w._pdfs);
+ });
+
+ const errores=RES.filter(r=>!r.ok);
+ log('\n'+(RES.length-errores.length)+' de '+RES.length+' pruebas pasan');
+ window.FIN=true;
+})();
+</script>

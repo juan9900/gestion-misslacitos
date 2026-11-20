@@ -29,6 +29,10 @@ App web para el celular, de un solo archivo, para manejar el emprendimiento Miss
 - La app guarda primero en el teléfono y después sube a la nube. Sin internet, los cambios esperan en cola. Nada se borra de verdad en la nube: queda marcado como borrado (`borrado = true`) y conserva su último contenido. Para recuperar algo borrado por error: `update public.registros set borrado = false where coleccion = '...' and id = '...';`
 - **Reportes PDF** (pantalla Dinero): del mes, del año, de una clienta y con todo. Se arman en el teléfono.
 
+## Pruebas
+
+`python pruebas/preparar.py` arma una copia con una nube simulada y la sirve en `http://127.0.0.1:8766/runner.html`. Ahí corren 74 comprobaciones (sincronización entre teléfonos, sin internet, validaciones, PDF). No tocan la base de datos real y no se publican en el sitio.
+
 ## Publicar en Netlify
 
 1. En Netlify: **Add new site → Import an existing project → GitHub** y elige este repositorio.

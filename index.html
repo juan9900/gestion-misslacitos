@@ -461,6 +461,8 @@ function aCent(v){let s=String(v??'').trim().replace(/[^\d.,]/g,'');if(!s)return
  else if(lc>-1){s=s.split(',').length>2?s.split(',').join(''):s.replace(',','.')}
  else if(ld>-1&&s.split('.').length>2){s=s.split('.').join('')}
  const n=parseFloat(s);return isFinite(n)&&n>0?Math.round(n*100):0}
+const MAX_MONTO=1e8;   /* $1.000.000,00: más que eso es un error de dedo */
+const fechaOk=s=>/^\d{4}-\d{2}-\d{2}$/.test(s)&&s>='2000-01-01'&&s<='2100-12-31'&&!isNaN(new Date(s+'T12:00:00').getTime());
 const centInput=c=>c?(c/100).toFixed(2).replace('.',','):'';
 const numViejo=v=>Math.round((parseFloat(String(v??0).replace(',','.'))||0)*100);
 function telWa(t){let d=String(t||'').replace(/\D/g,'');if(!d)return'';
@@ -525,6 +527,7 @@ function hoja(titulo,html,{ok='Guardar',c='c-menta',onOk,sinBoton}={}){
  $('#sheet-b').innerHTML=`<form id="sf" novalidate autocomplete="off">${html}<div id="sf-err"></div>
   ${sinBoton?'':`<button class="btn caramelo ${c}" type="submit" style="margin-top:24px">${ic('check')}${ok}</button>`}
   <button class="btn plano" type="button" data-a="cerrar">${sinBoton?'Cerrar':'Cancelar'}</button></form>`;
+ $$('#sf input:not([type=date]):not([type=number]):not([maxlength]),#sf textarea:not([maxlength])').forEach(i=>i.maxLength=i.tagName=='TEXTAREA'?600:120);
  alGuardar=onOk||null;soloInfo=!!sinBoton;$('#ov').hidden=false;bloquear(true);$('#sheet').scrollTop=0;
 }
 function cerrar(){$('#ov').hidden=true;if($('#login').hidden)bloquear(false);$('#sheet-b').innerHTML='';alGuardar=null}
@@ -535,7 +538,9 @@ function bloquear(on){const b=document.body;
  else{if(!b.classList.contains('lock'))return;b.classList.remove('lock');b.style.top='';window.scrollTo(0,scrollGuardado)}}
 function error(txt){$('#sf-err').innerHTML=`<div class="err">${ic('alerta')}<span>${esc(txt)}</span></div>`;$('#sf-err').scrollIntoView({block:'center',behavior:'smooth'});return false}
 function preguntar(txt,ok,fn,c='c-coral'){hoja('¿Estás segura?',`<p style="font-size:18px;margin:8px 0 0;font-weight:600;line-height:1.5">${txt}</p>`,{ok,c,onOk:()=>{fn();return true}})}
-$('#sheet-b').addEventListener('submit',e=>{e.preventDefault();if(!alGuardar)return cerrar();if(alGuardar(new FormData(e.target),e.target)!==false)cerrar()});
+$('#sheet-b').addEventListener('submit',e=>{e.preventDefault();if(!alGuardar)return cerrar();
+ let r;try{r=alGuardar(new FormData(e.target),e.target)}catch(err){console.error(err);cerrar();aviso('Eso ya no existe o cambió. Intenta otra vez.',true);pintar();return}
+ if(r!==false)cerrar()});
 /* tocar fuera solo cierra las hojas informativas: en un formulario se perdería lo escrito */
 $('#ov').addEventListener('click',e=>{if(e.target.id=='ov'&&soloInfo)cerrar()});
 document.addEventListener('input',e=>{const i=e.target;
@@ -717,7 +722,9 @@ function formPedido(p){
   <button type="button" class="mini" data-a="pfTodo" style="width:100%">${ic('check','s')}Me pagó todo</button>
   <div class="f">${paso(6,'¿Ya se lo entregaste?')}<div class="opciones">
    <button type="button" class="opcion on" data-a="pfEnt" data-id="0"><span class="ico">${ic('reloj')}</span>Todavía no</button>
-   <button type="button" class="opcion" data-a="pfEnt" data-id="1"><span class="ico">${ic('entregar')}</span>Sí, ya se lo llevó</button></div></div>`}`,
+   <button type="button" class="opcion" data-a="pfEnt" data-id="1"><span class="ico">${ic('entregar')}</span>Sí, ya se lo llevó</button></div></div>`}
+ <label class="f">${paso(p?0:7,'¿Qué día te lo pidieron?')}<small>Cámbialo solo si estás anotando un pedido de días pasados.</small>
+  <input class="in" type="date" name="fecha" value="${p?esc(p.fecha):hoy()}" max="${hoy()}"></label>`,
  {ok:p?'Guardar cambios':'Guardar pedido',c:'c-rosa',onOk:guardarPedido});
  pfCli();pfItems();pfProds();
 }
@@ -725,7 +732,7 @@ function pfCli(){
  const el=$('#pf-cli');if(!el)return;
  const c=F.clienteId&&cli(F.clienteId);
  if(c){el.innerHTML=`<div class="sel"><div style="min-width:0"><b>${esc(c.nombre)}</b>${c.tel?`<div class="sm">${esc(c.tel)}</div>`:''}</div><button type="button" class="mini" style="flex:none" data-a="pfCliQuitar">Cambiar</button></div>`;return}
- el.innerHTML=`<input class="in" id="pf-nom" placeholder="Escribe su nombre" value="${esc(F.nombre)}" autocomplete="off">
+ el.innerHTML=`<input class="in" id="pf-nom" maxlength="80" placeholder="Escribe su nombre" value="${esc(F.nombre)}" autocomplete="off">
   <div class="res" id="pf-res"></div><div id="pf-nueva"></div>`;
  const inp=$('#pf-nom');inp.addEventListener('input',()=>{F.nombre=inp.value;pfRes()});pfRes();
 }
@@ -736,7 +743,7 @@ function pfRes(){
  res.innerHTML=m.map(c=>`<button type="button" data-a="pfCliSel" data-id="${c.id}">${ic('clienta')}<span>${esc(c.nombre)}<small>${c.tel?esc(c.tel):'Sin teléfono'}</small></span></button>`).join('');
  const exacta=D.clientas.some(c=>norm(c.nombre.trim())==q);
  if(q&&!exacta){if(!$('#pf-tel'))nueva.innerHTML=`<label class="f" style="margin-top:12px"><span style="font-size:15px">Es clienta nueva. ¿Su teléfono? <em>(opcional)</em></span>
-   <input class="in" id="pf-tel" type="tel" inputmode="tel" placeholder="Ej: 0414 123 4567" value="${esc(F.tel)}"></label>`;
+   <input class="in" id="pf-tel" maxlength="25" type="tel" inputmode="tel" placeholder="Ej: 0414 123 4567" value="${esc(F.tel)}"></label>`;
   $('#pf-tel').oninput=e=>F.tel=e.target.value}
  else nueva.innerHTML='';
 }
@@ -752,7 +759,7 @@ function pfItems(){
  el.innerHTML=F.items.map((i,n)=>{const pr=i.pid&&prod(i.pid);
   const hint=pr?(pr.encargo?'Por encargo':'Te quedan '+((pr.stock||0)+(F.viejo?sum(F.viejo.items.filter(x=>x.pid==i.pid),x=>x.cant):0))):'';
   return`<div class="item"><div class="fila" style="align-items:center">${i.pid?`<div style="min-width:0"><b class="d" style="font-size:18px">${esc(i.nombre)}</b><div class="sm" style="font-size:13px">${hint}</div></div>`
-   :`<input class="in" style="margin:0;min-height:48px" placeholder="¿Qué producto?" value="${esc(i.nombre)}" data-it="${n}" data-k="nombre">`}
+   :`<input class="in" style="margin:0;min-height:48px" placeholder="¿Qué producto?" maxlength="80" value="${esc(i.nombre)}" data-it="${n}" data-k="nombre">`}
    <button type="button" class="quitar" data-a="pfQuitar" data-id="${n}" aria-label="Quitar">${ic('cerrar','s')}</button></div>
    <div class="row2"><div class="step"><button type="button" class="redondo" data-a="pfMenos" data-id="${n}" aria-label="Uno menos">${ic('menos')}</button><b class="d">${i.cant}</b><button type="button" class="redondo mas" data-a="pfMas" data-id="${n}" aria-label="Uno más">${ic('mas')}</button></div>
    <div class="din"><b>$</b><input inputmode="decimal" placeholder="0,00" value="${centInput(i.precio)}" data-it="${n}" data-k="precio"></div></div>
@@ -765,32 +772,40 @@ function pfItems(){
 }
 const pfTotal=()=>{const t=$('#pf-total');if(t)t.textContent=fmt(sum(F.items,i=>i.precio*i.cant))};
 function guardarPedido(fd){
- const detalle=String(fd.get('detalle')||'').trim(),entrega=String(fd.get('entrega')||'');
+ const detalle=String(fd.get('detalle')||'').trim(),entrega=String(fd.get('entrega')||''),fecha=String(fd.get('fecha')||hoy());
  F.items=F.items.map(i=>({...i,nombre:String(i.nombre||'').trim()}));
  if(!F.items.length)return error('Toca al menos un producto en el paso 2.');
  if(F.items.some(i=>!i.nombre))return error('Escribe el nombre del producto que falta.');
  if(F.items.some(i=>!i.precio))return error('Ponle precio a todos los productos.');
+ const caro=F.items.find(i=>i.precio>MAX_MONTO);
+ if(caro)return error('El precio de «'+caro.nombre+'» es demasiado alto. Revísalo.');
+ if(entrega&&!fechaOk(entrega))return error('Revisa la fecha de entrega.');
+ if(!fechaOk(fecha))return error('Revisa el día en que te lo pidieron.');
+ if(fecha>hoy())return error('El día del pedido no puede ser en el futuro.');
  const total=sum(F.items,i=>i.precio*i.cant);
+ if(!F.viejo&&aCent(fd.get('abono'))>total)return error('Pagó más de lo que cuesta el pedido ('+fmt(total)+'). Revisa cuánto te pagó.');
  let clienteId=F.clienteId;
  if(!clienteId&&F.nombre.trim()){const nom=F.nombre.trim(),ex=D.clientas.find(c=>norm(c.nombre.trim())==norm(nom));
   if(ex)clienteId=ex.id;else{const c={id:uid(),nombre:nom,tel:F.tel.trim(),dir:'',ig:'',notas:''};D.clientas.push(c);clienteId=c.id}}
- if(F.viejo){const p=F.viejo;moverStock(p.items,+1);Object.assign(p,{clienteId,items:F.items,total,detalle,entrega});moverStock(p.items,-1);
+ if(F.viejo){const p=F.viejo;moverStock(p.items,+1);Object.assign(p,{clienteId,items:F.items,total,detalle,entrega,fecha});moverStock(p.items,-1);
   guardar();aviso('Pedido actualizado');}
  else{
   const abono=aCent(fd.get('abono'));
-  const p={id:uid(),clienteId,items:F.items,total,pagoPrevio:0,detalle,entrega,entregado:F.yaEntregado,fecha:hoy()};
+  const p={id:uid(),clienteId,items:F.items,total,pagoPrevio:0,detalle,entrega,entregado:F.yaEntregado,fecha};
   D.pedidos.push(p);moverStock(p.items,-1);
-  if(abono>0)D.movs.push({id:uid(),tipo:'ing',concepto:(abono>=total?'Pago de ':'Abono de ')+(clienteId?cli(clienteId).nombre:'venta rápida'),cat:'Pago de pedido',monto:abono,fecha:hoy(),pedidoId:p.id});
-  guardar();aviso(abono>total?'Guardado. Ojo: pagó más de lo que cuesta':'¡Pedido guardado!');
+  if(abono>0)D.movs.push({id:uid(),tipo:'ing',concepto:(abono>=total?'Pago de ':'Abono de ')+(clienteId?cli(clienteId).nombre:'venta rápida'),cat:'Pago de pedido',monto:abono,fecha,pedidoId:p.id});
+  guardar();aviso('¡Pedido guardado!');
  }
  const faltan=F.items.filter(i=>{const pr=i.pid&&prod(i.pid);return pr&&!pr.encargo&&pr.stock<0});
  if(faltan.length)setTimeout(()=>aviso('Según el inventario no te alcanzaban: '+faltan.map(i=>i.nombre).join(', ')+'. Revisa el inventario.',true),2700);
 }
-function cobrar(id){const p=ped(id),d=debe(p);
+function cobrar(id){const p=ped(id);if(!p)return aviso('Ese pedido ya no existe.',true);const d=debe(p);
  hoja('Cobrar a '+nomCli(p),`<div class="sel" style="background:color-mix(in srgb,var(--coral) 12%,var(--card));border-color:color-mix(in srgb,var(--coral) 40%,transparent)"><span>Te debe</span><b class="d k-coral" style="font-size:26px">${fmt(d)}</b></div>
  ${campoDinero('monto',1,'¿Cuánto te pagó ahora?',d,'Si te pagó solo una parte, cambia el número.')}
  <label class="f">${paso(2,'¿Qué día te pagó?')}<input class="in" type="date" name="fecha" value="${hoy()}"></label>`,
- {ok:'Anotar pago',onOk:fd=>{const v=aCent(fd.get('monto'));if(!v)return error('Escribe cuánto te pagó.');
+ {ok:'Anotar pago',onOk:fd=>{const v=aCent(fd.get('monto')),d=debe(p);if(!v)return error('Escribe cuánto te pagó.');
+  if(v>d)return error('Solo te debe '+fmt(d)+'. Revisa el monto.');
+  if(!fechaOk(String(fd.get('fecha')||'')))return error('Revisa la fecha.');
   D.movs.push({id:uid(),tipo:'ing',concepto:(v>=d?'Pago de ':'Abono de ')+nomCli(p),cat:'Pago de pedido',monto:v,fecha:fd.get('fecha')||hoy(),pedidoId:p.id});
   guardar();aviso(debe(p)>0?'Anotado. Todavía debe '+fmt(debe(p)):'¡Pagado completo!')}})}
 function waPedido(id){const p=ped(id),c=cli(p.clienteId);if(!c||!c.tel)return;
@@ -831,6 +846,8 @@ function editClienta(id){const c=id?cli(id):{nombre:'',tel:'',dir:'',ig:'',notas
  <label class="f">${paso(5,'Notas',opc())}<small>Nombre de la niña, cumpleaños, gustos, talla…</small><textarea class="in" name="notas" placeholder="Ej: su hija Valentina, cumple el 3 de mayo, le encanta el morado">${esc(c.notas)}</textarea></label>`,
  {c:'c-limon',onOk:fd=>{const d={nombre:String(fd.get('nombre')).trim(),tel:String(fd.get('tel')).trim(),dir:String(fd.get('dir')).trim(),ig:String(fd.get('ig')).trim(),notas:String(fd.get('notas')).trim()};
   if(!d.nombre)return error('Escribe el nombre de la clienta.');
+  if(D.clientas.some(x=>x.id!=id&&norm(x.nombre.trim())==norm(d.nombre)))return error('Ya tienes una clienta con ese nombre.');
+  if(d.tel&&d.tel.replace(/\D/g,'').length<7)return error('Al teléfono le faltan números. Revísalo.');
   if(id)Object.assign(c,d);else D.clientas.push({id:uid(),...d});guardar();aviso('Clienta guardada')}})}
 
 /* ---------- INVENTARIO ---------- */
@@ -881,7 +898,8 @@ function editProd(id){const p=id?prod(id):{nombre:'',cat:'',precio:0,costo:0,sto
   if(!nom)return error('Escribe el nombre del producto.');
   if(!c)return error('Toca el tipo de producto (paso 2).');
   if(!precio)return error('Escribe a cuánto lo vendes.');
-  const d={nombre:nom,cat:c,precio,costo:aCent(fd.get('costo')),encargo:PC.enc,stock:PC.enc?0:Math.max(0,parseInt(fd.get('stock'))||0),minimo:Math.max(0,parseInt(fd.get('minimo'))||0)};
+  if(precio>MAX_MONTO||aCent(fd.get('costo'))>MAX_MONTO)return error('Ese precio es demasiado alto. Revísalo.');
+  const d={nombre:nom,cat:c,precio,costo:aCent(fd.get('costo')),encargo:PC.enc,stock:PC.enc?0:Math.min(99999,Math.max(0,parseInt(fd.get('stock'))||0)),minimo:Math.min(9999,Math.max(0,parseInt(fd.get('minimo'))||0))};
   if(id)Object.assign(p,d);else D.productos.push({id:uid(),...d});guardar();aviso('Producto guardado')}});
  PC={cat:p.cat||'',enc};pcCats();
 }
@@ -894,13 +912,14 @@ function llegaron(id){const p=prod(id);
  ${campoDinero('monto',2,'¿Cuánto gastaste en eso? <em>(opcional)</em>','','Si lo pones, se anota solo como inversión.')}`,
  {ok:'Sumar al inventario',c:'c-cielo',onOk:fd=>{const n=parseInt(fd.get('n'))||0,m=aCent(fd.get('monto'));
   if(n<=0)return error('Escribe cuántos hiciste o compraste.');
+  if(n>9999||m>MAX_MONTO)return error('Ese número es demasiado alto. Revísalo.');
   p.stock=(p.stock||0)+n;
   if(m)D.movs.push({id:uid(),tipo:'inv',concepto:n+' '+p.nombre,cat:'Mercancía',monto:m,fecha:hoy(),pedidoId:''});
   guardar();aviso(`Ahora tienes ${p.stock} ${p.nombre}`)}})}
 
 /* ---------- DINERO Y CORTE ---------- */
 function pDinero(){
- const c=corte(MES),act=mesDe(hoy());
+ const c=corte(MES),act=[mesDe(hoy()),...D.movs.map(m=>mesDe(m.fecha)),...D.pedidos.map(p=>mesDe(p.fecha))].sort().pop();
  const invTot=sum(D.movs.filter(m=>m.tipo=='inv'),m=>m.monto);
  const dejo=sum(D.movs.filter(m=>m.tipo=='ing'),m=>m.monto)-sum(D.movs.filter(m=>m.tipo=='egr'),m=>m.monto);
  const pct=invTot?Math.max(0,Math.round(dejo/invTot*100)):0;
@@ -966,6 +985,8 @@ function formMov(tipo,m){const T=TIPOS[tipo];
  ${m?`<button type="button" class="btn plano" data-a="borrarMov" data-id="${m.id}" style="margin-top:22px;color:var(--coral)">${ic('basura')}Borrar este movimiento</button>`:''}`,
  {c:T.c,onOk:fd=>{const monto=aCent(fd.get('monto')),concepto=String(fd.get('concepto')).trim(),fecha=String(fd.get('fecha')||hoy());
   if(!monto)return error('Escribe cuánto fue.');
+  if(monto>MAX_MONTO)return error('Ese monto es demasiado alto. Revísalo.');
+  if(!fechaOk(fecha))return error('Revisa la fecha.');
   if(!MV.cat&&!concepto)return error('Toca una opción o escribe qué fue.');
   if(m)Object.assign(m,{monto,concepto,cat:MV.cat,fecha});else D.movs.push({id:uid(),tipo,concepto,cat:MV.cat,monto,fecha,pedidoId:''});
   if(TAB=='dinero')MES=mesDe(fecha);guardar();aviso('¡Guardado!')}});
@@ -988,9 +1009,9 @@ $('#archivo').addEventListener('change',e=>{const f=e.target.files[0];e.target.v
  const r=new FileReader();r.onload=()=>{let o;try{o=JSON.parse(r.result)}catch(err){return aviso('Ese archivo no es una copia de Miss Lacitoss',true)}
   if(!o||typeof o!='object'||!(o.v===2||Array.isArray(o.p)||Array.isArray(o.c)))return aviso('Ese archivo no es una copia de Miss Lacitoss',true);
   const n=migrar(o);
-  preguntar(`${enNube()?'Vas a recuperar esta copia:':'Vas a cambiar lo que tienes ahora por esta copia:'}<br><br>${plural(n.pedidos.length,'pedido','pedidos')} · ${plural(n.clientas.length,'clienta','clientas')} · ${plural(n.productos.length,'producto','productos')} · ${plural(n.movs.length,'movimiento','movimientos')}<br><br>${enNube()?'Se <b>agrega</b> a lo que ya está en la nube. No se borra nada de lo que tienen los demás teléfonos.':'Lo que tienes ahora se reemplaza.'}`,'Sí, recuperar copia',()=>{
+  preguntar(`${enlazado()?'Vas a recuperar esta copia:':'Vas a cambiar lo que tienes ahora por esta copia:'}<br><br>${plural(n.pedidos.length,'pedido','pedidos')} · ${plural(n.clientas.length,'clienta','clientas')} · ${plural(n.productos.length,'producto','productos')} · ${plural(n.movs.length,'movimiento','movimientos')}<br><br>${enlazado()?'Se <b>agrega</b> a lo que ya está en la nube. No se borra nada de lo que tienen los demás teléfonos.':'Lo que tienes ahora se reemplaza.'}`,'Sí, recuperar copia',()=>{
    try{localStorage.setItem(KEY+'_antes_de_recuperar',JSON.stringify(D))}catch(err){}
-   if(enNube()){COLS.forEach(c=>(n[c]||[]).forEach(r=>{const i=D[c].findIndex(x=>x.id==r.id);if(i>-1)D[c][i]=r;else D[c].push(r)}));
+   if(enlazado()){COLS.forEach(c=>(n[c]||[]).forEach(r=>{const i=D[c].findIndex(x=>x.id==r.id);if(i>-1)D[c][i]=r;else D[c].push(r)}));
     (n.cats||[]).forEach(c=>{if(!D.cats.includes(c))D.cats.push(c)})}
    else D=n;
    guardar();aviso('¡Copia recuperada!')},'c-cielo')};
@@ -1005,13 +1026,14 @@ const NUBE_ON=!!(CFG.supabaseUrl&&CFG.supabaseKey);
 const LIB_SUPA='https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js';
 const LIB_PDF=['https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js','https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js'];
 const NKEY=KEY+'_nube',COLS=['productos','clientas','pedidos','movs','compras'];
-let sb=null,SES=null,N={uid:'',desde:'',ultimo:{},pend:{}},NE={error:'',subiendo:false};
+let sb=null,SES=null,N={uid:'',desde:'',ultimo:{},pend:{},mal:{},salio:false},NE={error:'',subiendo:false};
 const enNube=()=>NUBE_ON&&!!SES&&N.uid===SES.user.id;
+const enlazado=()=>NUBE_ON&&!!N.uid;   /* este teléfono ya comparte datos con la nube */
 const nPend=()=>Object.keys(N.pend).length;
 function cargarScript(src){return new Promise((ok,mal)=>{if($$('script').some(x=>x.src==src&&x.dataset.ok))return ok();const s=document.createElement('script');s.src=src;s.onload=()=>{s.dataset.ok='1';ok()};s.onerror=()=>{s.remove();mal(new Error('sin conexión'))};document.head.appendChild(s)})}
 /* JSON con llaves ordenadas: así la nube y el teléfono comparan igual */
 function canon(o){if(Array.isArray(o))return'['+o.map(canon).join(',')+']';if(o&&typeof o=='object')return'{'+Object.keys(o).sort().filter(k=>o[k]!==undefined).map(k=>JSON.stringify(k)+':'+canon(o[k])).join(',')+'}';return JSON.stringify(o===undefined?null:o)}
-function nubeLeer(){try{const o=JSON.parse(localStorage.getItem(NKEY)||'{}');N={uid:o.uid||'',desde:o.desde||'',ultimo:o.ultimo||{},pend:o.pend||{}}}catch(e){}}
+function nubeLeer(){try{const o=JSON.parse(localStorage.getItem(NKEY)||'{}');N={uid:o.uid||'',desde:o.desde||'',ultimo:o.ultimo||{},pend:o.pend||{},mal:o.mal||{},salio:!!o.salio}}catch(e){}}
 function nubeEscribir(){try{localStorage.setItem(NKEY,JSON.stringify(N))}catch(e){}}
 function foto(){const f={};COLS.forEach(c=>D[c].forEach(r=>f[c+':'+r.id]=canon(r)));f['ajustes:main']=canon({cats:D.cats});return f}
 function marcarCambios(){
@@ -1031,8 +1053,16 @@ async function subir(){
  const filas=lote.map(k=>{const v=N.pend[k],i=k.indexOf(':'),del=v===null||v[0]=='!';env[k]=v;return{coleccion:k.slice(0,i),id:k.slice(i+1),data:v===null?{}:JSON.parse(del?v.slice(1):v),borrado:del}});
  let ok=false;
  try{const{error}=await sb.from('registros').upsert(filas,{onConflict:'coleccion,id'});if(error)throw error;
-  lote.forEach(k=>{if(N.pend[k]===env[k])delete N.pend[k]});NE.error='';nubeEscribir();ok=true}
- catch(e){NE.error=traducirError(e)}
+  lote.forEach(k=>{if(N.pend[k]===env[k])delete N.pend[k]});NE.error=malTxt();nubeEscribir();ok=true}
+ catch(e){NE.error=traducirError(e);
+  /* La nube rechazó algo del lote (no es falta de internet): se sube uno por uno y lo rechazado se aparta */
+  if(rechazo(e)){
+   for(const f of filas){const k=f.coleccion+':'+f.id;let er=null;
+    try{const r=await sb.from('registros').upsert([f],{onConflict:'coleccion,id'});er=r.error}catch(x){er=x}
+    if(er&&!rechazo(er))break;
+    if(er)N.mal[k]=env[k];
+    if(N.pend[k]===env[k])delete N.pend[k]}
+   NE.error=malTxt();nubeEscribir();ok=true}}
  NE.subiendo=false;estadoNube();
  if(ok&&nPend())programarSubida(50);
 }
@@ -1044,7 +1074,7 @@ async function bajar(){
   if(N.desde)q=q.gte('actualizado',N.desde);
   const{data,error}=await q;
   if(error){NE.error=traducirError(error);break}
-  NE.error='';
+  NE.error=malTxt();
   for(const r of data){
    const k=r.coleccion+':'+r.id;
    if(!N.desde||r.actualizado>N.desde)N.desde=r.actualizado;
@@ -1062,6 +1092,8 @@ async function bajar(){
  if(cambio){guardar(true);const ae=document.activeElement;if($('#ov').hidden&&!(ae&&ae.matches('input,textarea')))pintar();else globo()}
  estadoNube();
 }
+const rechazo=e=>/^(22|23)/.test(String(e&&e.code||''));   /* error de datos, no de conexión ni de permisos */
+const malTxt=()=>{const n=Object.keys(N.mal).length;return n?'La nube no aceptó '+plural(n,'cambio','cambios')+'. Siguen guardados en este teléfono; avisa a quien te ayuda con la app.':''};
 function traducirError(e){const m=String(e&&e.message||e||'');
  if(/row-level security|permission|42501/i.test(m))return'Tu cuenta no tiene permiso para guardar. Revisa que esté en la lista de miembros.';
  if(/fetch|network|Failed/i.test(m))return'Sin conexión con la nube.';
@@ -1091,12 +1123,12 @@ $('#login-f').addEventListener('submit',async e=>{e.preventDefault();
  const{data,error}=await sb.auth.signInWithPassword({email,password:clave});
  btn.disabled=false;btn.textContent='Entrar';
  if(error)return err(/invalid/i.test(error.message)?'El correo o la contraseña no coinciden.':traducirError(error));
- SES=data.session;e.target.reset();$('#login-err').innerHTML='';await conectado();
+ SES=data.session;N.salio=false;nubeEscribir();e.target.reset();$('#login-err').innerHTML='';await conectado();
 });
 async function iniciarCliente(){
  await cargarScript(LIB_SUPA);
  sb=window.supabase.createClient(CFG.supabaseUrl,CFG.supabaseKey,{auth:{persistSession:true,autoRefreshToken:true,storageKey:'ml-sesion'}});
- sb.auth.onAuthStateChange((ev,s)=>{if(s)SES=s;if(ev=='SIGNED_OUT'){SES=null;estadoNube();pintar();mostrarLogin()}});
+ sb.auth.onAuthStateChange((ev,s)=>{if(s)SES=s;if(ev=='SIGNED_OUT'){SES=null;N.salio=true;nubeEscribir();estadoNube();pintar();mostrarLogin()}});
 }
 let arrancando=false;
 async function arrancarNube(){
@@ -1105,20 +1137,22 @@ async function arrancarNube(){
 }
 async function arrancarNube2(){
  nubeLeer();
- try{if(!sb)await iniciarCliente()}catch(e){NE.error='Sin conexión con la nube.';if(!N.uid)mostrarLogin();return}
+ try{if(!sb)await iniciarCliente()}catch(e){NE.error='Sin conexión con la nube.';if(!N.uid||N.salio)mostrarLogin();return}
  let data=null,error=null;
  /* sin conexión la librería puede quedarse esperando: se le da un tiempo límite */
  try{({data,error}=await Promise.race([sb.auth.getSession(),new Promise(r=>setTimeout(()=>r({data:null,error:new Error('tiempo')}),8000))]))}catch(e){error=e}
  SES=(data&&data.session)||null;
  if(!SES){
   /* Teléfono ya enlazado pero sin conexión: se sigue trabajando aquí y todo sube al volver el internet */
-  if(N.uid&&(error||!navigator.onLine)){NE.error='Sin conexión con la nube.';return}
+  if(N.uid&&!N.salio&&(error||!navigator.onLine)){NE.error='Sin conexión con la nube.';return}
   return mostrarLogin()}
  await conectado();
 }
 async function conectado(){
  ocultarLogin();
  if(N.uid!==SES.user.id){await primeraVez();return}
+ /* lo que la nube rechazó antes se vuelve a intentar una vez al abrir */
+ for(const k in N.mal)if(!(k in N.pend))N.pend[k]=N.mal[k];N.mal={};
  estadoNube();marcarCambios();await subir();await bajar();pintar();
 }
 async function primeraVez(){
@@ -1126,7 +1160,7 @@ async function primeraVez(){
  let enLaNube=0;
  try{const{count,error}=await sb.from('registros').select('id',{count:'exact',head:true}).eq('borrado',false).neq('coleccion','ajustes');if(error)throw error;enLaNube=count||0}
  catch(e){NE.error=traducirError(e);aviso(NE.error,true);return}
- const empezar=()=>{N={uid:SES.user.id,desde:'',ultimo:{},pend:{}};nubeEscribir()};
+ const empezar=()=>{N={uid:SES.user.id,desde:'',ultimo:{},pend:{},mal:{},salio:false};nubeEscribir()};
  if(!enLaNube){empezar();marcarCambios();await subir();pintar();if(local)aviso('Listo: tus datos ya están guardados en la nube');return}
  if(!local){empezar();await bajar();pintar();aviso('Listo: trajimos tus datos de la nube');return}
  hoja('Ya hay datos en la nube',`<p style="font-size:17px;line-height:1.5;margin:6px 0 0;font-weight:600">En la nube hay <b>${plural(enLaNube,'registro','registros')}</b> y en este teléfono también tienes datos. ¿Qué hacemos?</p>
@@ -1290,7 +1324,7 @@ const A={
  pfAddCat:c=>{F.items.push({pid:'',nombre:c,cant:1,precio:0});pfItems();setTimeout(()=>$$('#pf-items [data-k=precio]').pop()?.focus(),30)},
  pfAddOtro:()=>{F.items.push({pid:'',nombre:'',cant:1,precio:0});pfItems();setTimeout(()=>$$('#pf-items [data-k=nombre]').pop()?.focus(),30)},
  pfQuitar:n=>{F.items.splice(+n,1);pfItems()},
- pfMas:n=>{F.items[+n].cant++;pfItems()},
+ pfMas:n=>{const i=F.items[+n];if(i.cant<999){i.cant++;pfItems()}},
  pfMenos:n=>{const i=F.items[+n];if(i.cant>1){i.cant--;pfItems()}},
  pfTodo:()=>{const i=$('#sf [name=abono]'),t=sum(F.items,x=>x.precio*x.cant);if(!t)return aviso('Primero toca los productos y su precio',true);
   i.value=centInput(t);i.dispatchEvent(new Event('input',{bubbles:true}))},
@@ -1302,7 +1336,7 @@ const A={
  editProd:id=>editProd(id),
  pcCat:c=>{PC.cat=PC.cat==c?'':c;pcCats();if(PC.cat=='__nueva')$('#pc-nueva').focus()},
  pcEnc:(id,b)=>{PC.enc=id=='1';$$('[data-a=pcEnc]').forEach(x=>x.classList.toggle('on',x==b));$('#pc-stock').hidden=PC.enc},
- stock:(id,b)=>{const p=prod(id),n=+b.dataset.n;if(n<0&&(p.stock||0)<=0)return;p.stock=(p.stock||0)+n;guardar()},
+ stock:(id,b)=>{const p=prod(id),n=+b.dataset.n;if(n<0&&(p.stock||0)<=0)return;if(n>0&&(p.stock||0)>=99999)return;p.stock=(p.stock||0)+n;guardar()},
  llegaron:id=>llegaron(id),
  borrarProd:id=>{const p=prod(id);preguntar(`Vas a borrar <b>${esc(p.nombre)}</b> del inventario.<br><br>Los pedidos viejos no se borran.`,'Sí, borrar',()=>{D.productos=D.productos.filter(x=>x.id!=id);guardar();aviso('Producto borrado')})},
  mov:t=>formMov(t,null),
@@ -1322,7 +1356,7 @@ const A={
   if(c.hecho){c.hecho=false;return guardar()}
   hoja('¿Ya lo compraste?',`<div class="nota">${ic('bolsa')}<span><b>${esc(c.texto)}</b></span></div>
    ${campoDinero('monto',0,'¿Cuánto te costó? <em>(opcional)</em>','','Si lo pones, se anota solo como inversión.')}`,
-   {ok:'Sí, ya lo compré',c:'c-lila',onOk:fd=>{const m=aCent(fd.get('monto'));c.hecho=true;
+   {ok:'Sí, ya lo compré',c:'c-lila',onOk:fd=>{const m=aCent(fd.get('monto'));if(m>MAX_MONTO)return error('Ese monto es demasiado alto. Revísalo.');c.hecho=true;
     if(m)D.movs.push({id:uid(),tipo:'inv',concepto:c.texto,cat:'Materiales',monto:m,fecha:hoy(),pedidoId:''});
     guardar();aviso(m?'Comprado y anotado como inversión':'¡Comprado!')}})},
  compraDel:id=>{D.compras=D.compras.filter(x=>x.id!=id);guardar()},
@@ -1340,7 +1374,8 @@ const A={
  repCli:id=>{if(!$('#ov').hidden)cerrar();repCli(id)},repCliElegir:()=>repCliElegir(),
 };
 document.addEventListener('click',e=>{const b=e.target.closest('[data-a]');if(!b)return;
- const f=A[b.dataset.a];if(!f)return;e.preventDefault();f(b.dataset.id,b,e)});
+ const f=A[b.dataset.a];if(!f)return;e.preventDefault();
+ try{f(b.dataset.id,b,e)}catch(err){console.error(err);aviso('Eso ya no existe o cambió. Intenta otra vez.',true);if($('#ov').hidden)pintar()}});
 
 /* al volver a la app (por ejemplo al día siguiente) se recalculan los recordatorios */
 document.addEventListener('visibilitychange',()=>{if(document.visibilityState=='visible'&&$('#ov').hidden&&$('#login').hidden&&!(document.activeElement&&document.activeElement.matches('input,textarea')))pintar()});

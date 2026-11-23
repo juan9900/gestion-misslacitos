@@ -322,6 +322,16 @@ nav button{position:relative}
 .cob.hecho{opacity:.55}
 .cob.hecho .mini{border-color:var(--menta);color:var(--menta)}
 
+/* ---------- interesadas ---------- */
+.seg{display:flex;gap:6px;background:var(--card);border:1px solid var(--line);border-radius:18px;padding:5px;margin-bottom:12px}
+.seg button{flex:1;min-height:46px;border:0;border-radius:14px;background:transparent;color:var(--muted);font-weight:800;font-size:15px}
+.seg button.on{background:var(--lila);color:var(--tinta)}
+.seg button small{font-weight:800;opacity:.7}
+.seg .nb{display:inline-block;min-width:20px;height:20px;padding:0 6px;margin-left:4px;border-radius:10px;background:var(--coral);color:var(--tinta);font-size:12px;line-height:20px;vertical-align:1px}
+.int.falta::before{content:"";position:absolute;left:0;top:18px;bottom:18px;width:4px;border-radius:0 4px 4px 0;background:var(--lila)}
+.int.cerrada{opacity:.6}
+.login-link{display:block;width:100%;margin-top:14px;border:0;background:none;color:var(--rosa);font-weight:800;font-size:15px;min-height:44px}
+
 /* ---------- nube ---------- */
 .nube{margin-left:auto;flex:none;display:inline-flex;align-items:center;gap:6px;min-height:40px;padding:6px 12px;border-radius:30px;border:1.5px solid var(--line2);background:var(--card);color:var(--t,var(--muted));font-weight:800;font-size:13px}
 .nube .i{width:20px;height:20px}
@@ -386,6 +396,13 @@ nav button{position:relative}
   <button type="button" class="mini" data-a="verClave" style="width:100%;margin-top:10px">Mostrar la contraseña</button>
   <div id="login-err"></div>
   <button class="btn caramelo c-rosa" type="submit" style="margin-top:22px" id="login-btn">Entrar</button>
+  <button type="button" class="login-link" data-a="olvide">Olvidé mi contraseña</button>
+ </form>
+ <form id="nueva-f" novalidate hidden>
+  <label class="f"><span>Nueva contraseña</span><input class="in" name="c1" type="password" autocomplete="new-password" minlength="6" placeholder="Mínimo 6 letras o números"></label>
+  <label class="f"><span>Repítela</span><input class="in" name="c2" type="password" autocomplete="new-password" placeholder="La misma otra vez"></label>
+  <div id="nueva-err"></div>
+  <button class="btn caramelo c-rosa" type="submit" style="margin-top:22px" id="nueva-btn">Guardar contraseña</button>
  </form>
 </div></div>
 <script src="config.js"></script>
@@ -443,6 +460,7 @@ const P={
  salir:'<path d="M14.5 4.5h4a1.5 1.5 0 0 1 1.5 1.5v12a1.5 1.5 0 0 1-1.5 1.5h-4"/><path d="M10 16.5 5.5 12 10 7.5M5.5 12H15"/>',
  pdf:'<path d="M6 3.5h8.5l4 4v13H6z"/><path d="M14 3.5V8h4.5"/><path d="M9 13h6M9 16.5h6"/>',
  sync:'<path d="M19.5 9A7.5 7.5 0 0 0 5.3 7.5M4.5 15a7.5 7.5 0 0 0 14.2 1.5"/><path d="M19.8 4v5h-5M4.2 20v-5h5"/>',
+ chat:'<path d="M4 18.5V6.5a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H8.5L4 20.5v-2Z"/><path d="M8.5 9.5h7M8.5 12.5h4.5"/>',
 };
 const ic=(n,c='')=>`<svg class="i ${c}" viewBox="0 0 24 24" aria-hidden="true">${P[n]||''}</svg>`;
 
@@ -493,7 +511,7 @@ function telWa(t){let d=String(t||'').replace(/\D/g,'');if(!d)return'';
 
 /* ---------- datos ---------- */
 let D;
-function vacio(){return{v:2,productos:[],clientas:[],pedidos:[],movs:[],compras:[],cats:[...CATS],copiaAt:''}}
+function vacio(){return{v:2,productos:[],clientas:[],pedidos:[],movs:[],compras:[],interesadas:[],cats:[...CATS],copiaAt:''}}
 function migrar(o){
  if(!o||typeof o!=='object')return vacio();
  if(o.v===2){const n=vacio();for(const k in n)if(o[k]===undefined)o[k]=n[k];return o}
@@ -584,7 +602,7 @@ const campoDinero=(name,n,label,val,help)=>`<label class="f">${paso(n,label)}${h
    ========================================================= */
 let TAB='inicio',FILTRO='pend',BUSCA_P='',BUSCA_C='',BUSCA_I='',MES=mesDe(hoy());
 const SECC=[['inicio','Inicio','inicio'],['pedidos','Pedidos','bolsa'],['inventario','Inventario','caja'],['clientas','Clientas','clienta'],['dinero','Dinero','cartera']];
-const TITULOS={inicio:'Miss Lacitoss',pedidos:'Pedidos',inventario:'Inventario',clientas:'Clientas',dinero:'Dinero'};
+const TITULOS={inicio:'Inicio',pedidos:'Pedidos',inventario:'Inventario',clientas:'Clientas',dinero:'Dinero'};
 $('#menu').innerHTML=SECC.map(([k,t,i])=>`<button data-a="tab" data-id="${k}">${ic(i)}${t}</button>`).join('');
 function irA(t){TAB=t;$$('#menu button').forEach(b=>b.classList.toggle('on',b.dataset.id==t));
  SECC.forEach(([k])=>$('#pg-'+k).hidden=k!=t);$('#titulo').textContent=TITULOS[t];pintar();window.scrollTo(0,0)}
@@ -632,12 +650,14 @@ function recordatorios(){
  });
  D.productos.filter(p=>!p.encargo&&stockDe(p)<=(p.minimo??2)).forEach(p=>{const st=stockDe(p);
   L.push({u:st<=0?2:6,o:st,t:st<=0?'coral':'limon',ic:'caja',tit:st<=0?'Se agotó: '+p.nombre:(st==1?'Queda 1 de ':'Quedan '+st+' de ')+p.nombre,sub:'Haz o compra más',tag:'',a:'llegaron',aTxt:'Sumar',id:p.id,prod:true})});
+ (D.interesadas||[]).filter(x=>!x.respondida&&!x.cerrada).forEach(x=>{const dias=Math.max(0,-diasHasta(x.fecha||hoy()));
+  L.push({u:dias>=1?2:3,o:-dias,t:'lila',ic:'chat',tit:'Responder a '+nomInt(x),sub:x.pregunta||'Preguntó por Instagram',tag:dias?'Preguntó hace '+plural(dias,'día','días'):'Preguntó hoy',a:'intResp',aTxt:'Respondí',id:x.id,ir:'verInteresadas'})});
  return L.sort((a,b)=>a.u-b.u||a.o-b.o)}
 function recHtml(){
  const L=recordatorios(),ver=REC_TODOS?L:L.slice(0,5);
  const otros=D.pedidos.filter(p=>!p.entregado&&(!p.entrega||diasHasta(p.entrega)>7)).length;
  return titulo('Recordatorios',L.length||null)
-  +(L.length?ver.map(r=>`<div class="rec t-${r.t} ${r.u<=2?'urg':''}"><button class="cu" data-a="${r.prod?'tab':'verPedido'}" data-id="${r.prod?'inventario':r.id}"><span class="ic">${ic(r.ic)}</span>
+  +(L.length?ver.map(r=>`<div class="rec t-${r.t} ${r.u<=2?'urg':''}"><button class="cu" data-a="${r.ir||(r.prod?'tab':'verPedido')}" data-id="${r.ir?r.id:r.prod?'inventario':r.id}"><span class="ic">${ic(r.ic)}</span>
    <span class="tx"><b>${esc(r.tit)}</b><span class="sm">${r.tag?`<em>${r.tag}</em> · `:''}${esc(r.sub)}</span></span></button>
    <button class="mini" data-a="${r.a}" data-id="${r.id}">${r.aTxt}</button></div>`).join('')
    +(L.length>5?`<button class="btn plano" data-a="recTodos">${REC_TODOS?'Ver menos':'Ver los '+L.length+' recordatorios'}</button>`:'')
@@ -933,10 +953,72 @@ function waPedido(id){const p=ped(id),c=cli(p.clienteId);if(!c||!c.tel)return;
  window.open('https://wa.me/'+telWa(c.tel)+'?text='+encodeURIComponent(t),'_blank')}
 
 /* ---------- CLIENTAS ---------- */
+let VISTA_C='clientas',BUSCA_N='',VER_CERRADAS=false;
+const igHandle=s=>{let h=String(s||'').trim().replace(/^(https?:\/\/)?(www\.)?instagram\.com\//i,'').replace(/^@+/,'').split(/[/?#]/)[0].trim();return /^[A-Za-z0-9._]{1,30}$/.test(h)?h:''};
+const nomInt=x=>x.nombre||(igHandle(x.ig)?'@'+igHandle(x.ig):'')||x.tel||'Sin nombre';
+function segClientas(){const nf=(D.interesadas||[]).filter(x=>!x.respondida&&!x.cerrada).length;
+ return`<div class="seg"><button class="${VISTA_C=='clientas'?'on':''}" data-a="vistaC" data-id="clientas">Clientas <small>${D.clientas.length}</small></button>
+  <button class="${VISTA_C=='interesadas'?'on':''}" data-a="vistaC" data-id="interesadas">Interesadas ${nf?`<b class="nb" aria-label="${nf} sin responder">${nf}</b>`:`<small>${(D.interesadas||[]).length}</small>`}</button></div>`}
+function pInteresadas(){
+ const q=norm(BUSCA_N.trim()),L=(D.interesadas||[]).filter(x=>!q||[x.nombre,x.ig,x.tel,x.pregunta].some(v=>norm(v).includes(q)));
+ const orden=(a,b)=>(a.fecha||'').localeCompare(b.fecha||'');
+ const falta=L.filter(x=>!x.respondida&&!x.cerrada).sort(orden),abiertas=L.filter(x=>x.respondida&&!x.cerrada).sort((a,b)=>orden(b,a)),cerradas=L.filter(x=>x.cerrada).sort((a,b)=>orden(b,a));
+ const card=x=>{const h=igHandle(x.ig),dias=Math.max(0,-diasHasta(x.fecha||hoy()));
+  return`<article class="card int ${!x.respondida&&!x.cerrada?'falta':''} ${x.cerrada?'cerrada':''}"><div class="fila"><div style="min-width:0"><div class="nm d">${esc(nomInt(x))}</div>
+   <div class="meta">${h?`<span>${ic('ig','s')}@${esc(h)}</span>`:''}${x.tel?`<span>${ic('tel','s')}${esc(x.tel)}</span>`:''}<span>${ic('cal','s')}${dias?'hace '+plural(dias,'día','días'):'hoy'}</span></div></div>
+   ${x.cerrada=='compro'?`<span class="tag t-menta">${ic('check','s')}Compró</span>`:x.cerrada?'<span class="tag">No compró</span>':x.respondida?'<span class="tag t-menta">Respondida</span>':'<span class="tag t-lila">Falta responder</span>'}</div>
+   ${x.pregunta?`<div class="det">${ic('chat','s')}<span>${esc(x.pregunta)}</span></div>`:''}
+   <div class="acts">
+    ${h?`<a class="mini" href="https://www.instagram.com/${encodeURIComponent(h)}/" target="_blank" rel="noopener">${ic('ig','s')}Instagram</a>`:''}
+    ${telWa(x.tel)?`<a class="mini" style="color:#5fdc8f" href="https://wa.me/${telWa(x.tel)}" target="_blank" rel="noopener">${ic('wa','s')}WhatsApp</a>`:''}
+    ${x.cerrada?`<button class="mini" data-a="intReabrir" data-id="${x.id}">${ic('deshacer','s')}Reabrir</button>`
+     :`${x.respondida?'':`<button class="mini caramelo c-lila" data-a="intResp" data-id="${x.id}">${ic('check','s')}Ya le respondí</button>`}
+      <button class="mini" data-a="intCompro" data-id="${x.id}">${ic('bolsa','s')}Hizo un pedido</button>
+      <button class="mini" data-a="intNo" data-id="${x.id}">No compró</button>`}
+    <button class="mini ico" data-a="editInt" data-id="${x.id}" aria-label="Editar">${ic('lapiz','s')}</button>
+    <button class="mini ico borrar" data-a="borrarInt" data-id="${x.id}" aria-label="Borrar">${ic('basura','s')}</button>
+   </div></article>`};
+ $('#pg-clientas').innerHTML=`${segClientas()}<button class="btn caramelo c-lila" data-a="editInt">${ic('mas')}Anotar interesada</button>
+  <p class="sm" style="margin:4px 2px 0">Personas que preguntaron por Instagram o WhatsApp y todavía no compran.</p>
+  ${(D.interesadas||[]).length>4?`<div class="buscar">${ic('lupa')}<input id="bn" type="search" placeholder="Buscar" value="${esc(BUSCA_N)}"></div>`:''}
+  ${titulo('Falta responder',falta.length||null)}${falta.map(card).join('')||vacioHtml('check','No hay nadie esperando respuesta.')}
+  ${abiertas.length?titulo('Ya respondidas',abiertas.length)+abiertas.map(card).join(''):''}
+  ${cerradas.length?`<button class="btn plano" data-a="verCerradas">${VER_CERRADAS?'Ocultar':'Ver'} las ${cerradas.length} cerradas</button>${VER_CERRADAS?cerradas.map(card).join(''):''}`:''}`;
+ conBusqueda('#bn',v=>BUSCA_N=v);
+}
+function editInt(id){const x=id?(D.interesadas||[]).find(v=>v.id==id):{nombre:'',ig:'',tel:'',pregunta:'',respondida:false};if(!x)return;
+ let resp=!!x.respondida;
+ hoja(id?'Cambiar interesada':'Anotar interesada',`
+ <label class="f">${paso(1,'¿Cómo se llama?',opc())}<input class="in" name="nombre" maxlength="80" value="${esc(x.nombre)}" placeholder="Ej: Ana"></label>
+ <label class="f">${paso(2,'Su Instagram',opc())}<input class="in" name="ig" maxlength="80" value="${esc(x.ig)}" placeholder="@usuario" autocapitalize="off" autocorrect="off"></label>
+ <label class="f">${paso(3,'Su teléfono',opc())}<input class="in" name="tel" maxlength="25" type="tel" inputmode="tel" value="${esc(x.tel)}" placeholder="Ej: 0414 123 4567"></label>
+ <label class="f">${paso(4,'¿Qué preguntó?',opc())}<textarea class="in" name="pregunta" maxlength="600" placeholder="Ej: precio de los lazos rosados, si hacen envíos">${esc(x.pregunta)}</textarea></label>
+ <div class="f">${paso(5,'¿Ya le respondiste?')}<div class="opciones">
+  <button type="button" class="opcion ${resp?'':'on'}" data-a="intOp" data-id="0"><span class="ico">${ic('reloj')}</span>Todavía no</button>
+  <button type="button" class="opcion ${resp?'on':''}" data-a="intOp" data-id="1"><span class="ico">${ic('check')}</span>Sí, ya le respondí</button></div></div>`,
+ {c:'c-lila',onOk:fd=>{const d={nombre:String(fd.get('nombre')).trim(),ig:String(fd.get('ig')).trim(),tel:String(fd.get('tel')).trim(),pregunta:String(fd.get('pregunta')).trim()};
+  if(!d.nombre&&!d.ig&&!d.tel)return error('Escribe al menos su nombre, su Instagram o su teléfono.');
+  if(d.ig&&!igHandle(d.ig))return error('Ese Instagram no parece válido. Escríbelo así: @usuario');
+  if(d.tel&&d.tel.replace(/\D/g,'').length<7)return error('Al teléfono le faltan números. Revísalo.');
+  d.respondida=INT_OP;
+  if(id)Object.assign(x,d);else{D.interesadas=D.interesadas||[];D.interesadas.push({id:uid(),...d,cerrada:'',fecha:hoy()})}
+  VISTA_C='interesadas';guardar();aviso('Interesada guardada')}});
+ INT_OP=resp;
+}
+let INT_OP=false;
+/* pasa la interesada a clienta (si no existe) y abre un pedido nuevo para ella */
+function intCompro(id){const x=(D.interesadas||[]).find(v=>v.id==id);if(!x)return;
+ const h=igHandle(x.ig);
+ let c=D.clientas.find(c=>(h&&igHandle(c.ig).toLowerCase()==h.toLowerCase())||(x.nombre&&norm(c.nombre.trim())==norm(x.nombre.trim())));
+ if(!c){c={id:uid(),nombre:x.nombre||(h?'@'+h:x.tel),tel:x.tel||'',dir:'',ig:h?'@'+h:'',notas:x.pregunta?'Preguntó: '+x.pregunta:''};D.clientas.push(c)}
+ x.cerrada='compro';x.respondida=true;guardar();
+ formPedido(null);F.clienteId=c.id;pfCli();aviso('Ahora es clienta. Anota su pedido.')}
+
 function pClientas(){
+ if(VISTA_C=='interesadas')return pInteresadas();
  const q=norm(BUSCA_C.trim());
  const l=D.clientas.filter(c=>!q||[c.nombre,c.tel,c.dir,c.ig,c.notas].some(x=>norm(x).includes(q))).sort((a,b)=>a.nombre.localeCompare(b.nombre));
- $('#pg-clientas').innerHTML=`<button class="btn caramelo c-limon" data-a="editClienta">${ic('mas')}Clienta nueva</button>
+ $('#pg-clientas').innerHTML=`${segClientas()}<button class="btn caramelo c-limon" data-a="editClienta">${ic('mas')}Clienta nueva</button>
  <div class="buscar">${ic('lupa')}<input id="bc" type="search" placeholder="Buscar por nombre o teléfono" value="${esc(BUSCA_C)}"></div>
  ${titulo('Mis clientas',D.clientas.length)}
  ${l.map(c=>{const ps=D.pedidos.filter(p=>p.clienteId==c.id),d=sum(ps,debe);
@@ -1146,10 +1228,14 @@ $('#archivo').addEventListener('change',e=>{const f=e.target.files[0];e.target.v
    Si no hay internet, los cambios esperan en cola y suben solos.
    ========================================================= */
 const CFG=window.ML_CONFIG||{};
+/* el enlace del correo de recuperación llega como #...type=recovery (o con un error si venció) */
+const HASH0=location.hash||'';
+const RECUP=/type=recovery/.test(HASH0);
+const RECUP_ERR=/error_code=|error=/.test(HASH0)?(/expired/.test(HASH0)?'El enlace ya venció. Pide uno nuevo con «Olvidé mi contraseña».':'Ese enlace no sirve. Pide uno nuevo con «Olvidé mi contraseña».'):'';
 const NUBE_ON=!!(CFG.supabaseUrl&&CFG.supabaseKey);
 const LIB_SUPA='https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js';
 const LIB_PDF=['https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js','https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js'];
-const NKEY=KEY+'_nube',COLS=['productos','clientas','pedidos','movs','compras'];
+const NKEY=KEY+'_nube',COLS=['productos','clientas','pedidos','movs','compras','interesadas'];
 let sb=null,SES=null,N={uid:'',desde:'',ultimo:{},pend:{},mal:{},salio:false},NE={error:'',subiendo:false};
 const enNube=()=>NUBE_ON&&!!SES&&N.uid===SES.user.id;
 const enlazado=()=>NUBE_ON&&!!N.uid;   /* este teléfono ya comparte datos con la nube */
@@ -1236,7 +1322,33 @@ function nubeCard(){const n=nPend();
   :['var(--menta)','nubeok','Todo está guardado en la nube. Aunque se pierda el teléfono, no se pierde nada.'];
  return`<div class="estado" style="--t:${t}"><span class="ic">${ic(i,'l')}</span><div style="min-width:0"><b>${NE.error&&!/conexión/.test(NE.error)?'Hay un problema':n?(navigator.onLine&&!NE.error?'Guardando…':'Sin internet'):'Todo guardado'}</b><div class="sm">${esc(txt)}</div></div></div>
   <div class="sm" style="margin-top:10px">Cuenta: <b style="color:var(--ink)">${esc(SES?SES.user.email:'')}</b></div>`}
-function mostrarLogin(){$('#login-logo').src=$('.logo img').src;$('#login').hidden=false;bloquear(true)}
+function mostrarLogin(msg){$('#login-logo').src=$('.logo img').src;$('#login-f').hidden=false;$('#nueva-f').hidden=true;
+ $('#login h2').textContent='¡Hola de nuevo!';$('#login .caja>p').textContent='Entra con tu correo para que tus datos queden guardados en la nube.';
+ if(msg)$('#login-err').innerHTML=`<div class="err">${ic('alerta')}<span>${esc(msg)}</span></div>`;
+ $('#login').hidden=false;bloquear(true)}
+function mostrarNueva(){mostrarLogin();$('#login-f').hidden=true;$('#nueva-f').hidden=false;
+ $('#login h2').textContent='Nueva contraseña';$('#login .caja>p').textContent='Escribe la contraseña nueva para '+(SES&&SES.user.email||'tu cuenta')+'.'}
+$('#nueva-f').addEventListener('submit',async e=>{e.preventDefault();
+ const fd=new FormData(e.target),c1=String(fd.get('c1')),c2=String(fd.get('c2'));
+ const err=t=>$('#nueva-err').innerHTML=`<div class="err">${ic('alerta')}<span>${esc(t)}</span></div>`;
+ if(c1.length<6)return err('Usa al menos 6 letras o números.');
+ if(c1!==c2)return err('Las dos contraseñas no son iguales.');
+ const btn=$('#nueva-btn');btn.disabled=true;btn.textContent='Guardando…';
+ let r;try{r=await sb.auth.updateUser({password:c1})}catch(x){r={error:x}}
+ btn.disabled=false;btn.textContent='Guardar contraseña';
+ if(r.error)return err(/same|different/i.test(r.error.message)?'Esa es la misma contraseña de antes. Escribe una distinta.':/session|expired|jwt/i.test(r.error.message)?'El enlace ya venció. Pide uno nuevo.':traducirError(r.error));
+ try{history.replaceState(null,'',location.pathname)}catch(x){}
+ e.target.reset();$('#nueva-err').innerHTML='';N.salio=false;nubeEscribir();aviso('¡Contraseña cambiada!');await conectado();
+});
+async function olvide(){
+ const email=String($('#login-f [name=email]').value||'').trim();
+ const err=(t,bien)=>$('#login-err').innerHTML=`<div class="err" ${bien?'style="background:color-mix(in srgb,var(--menta) 14%,transparent);color:var(--menta)"':''}>${ic(bien?'check':'alerta')}<span>${esc(t)}</span></div>`;
+ if(!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email))return err('Escribe arriba tu correo y vuelve a tocar «Olvidé mi contraseña».');
+ if(!sb){try{await iniciarCliente()}catch(x){return err('No hay conexión. Revisa el internet e intenta otra vez.')}}
+ let r;try{r=await sb.auth.resetPasswordForEmail(email,{redirectTo:location.origin+location.pathname})}catch(x){r={error:x}}
+ if(r.error)return err(/rate|seconds|many/i.test(r.error.message)?'Ya pediste un correo hace poco. Espera unos minutos y revisa tu bandeja.':traducirError(r.error));
+ err('Listo: te enviamos un correo (llega en inglés, de Supabase). Abre el enlace en este mismo teléfono para poner tu contraseña nueva. Revisa también Spam.',true);
+}
 function ocultarLogin(){$('#login').hidden=true;if($('#ov').hidden)bloquear(false)}
 $('#login-f').addEventListener('submit',async e=>{e.preventDefault();
  const fd=new FormData(e.target),email=String(fd.get('email')).trim(),clave=String(fd.get('clave'));
@@ -1252,7 +1364,7 @@ $('#login-f').addEventListener('submit',async e=>{e.preventDefault();
 async function iniciarCliente(){
  await cargarScript(LIB_SUPA);
  sb=window.supabase.createClient(CFG.supabaseUrl,CFG.supabaseKey,{auth:{persistSession:true,autoRefreshToken:true,storageKey:'ml-sesion'}});
- sb.auth.onAuthStateChange((ev,s)=>{if(s)SES=s;if(ev=='SIGNED_OUT'){SES=null;N.salio=true;nubeEscribir();estadoNube();pintar();mostrarLogin()}});
+ sb.auth.onAuthStateChange((ev,s)=>{if(s)SES=s;if(ev=='PASSWORD_RECOVERY'){SES=s;setTimeout(mostrarNueva,0)}if(ev=='SIGNED_OUT'){SES=null;N.salio=true;nubeEscribir();estadoNube();pintar();mostrarLogin()}});
 }
 let arrancando=false;
 async function arrancarNube(){
@@ -1266,6 +1378,8 @@ async function arrancarNube2(){
  /* sin conexión la librería puede quedarse esperando: se le da un tiempo límite */
  try{({data,error}=await Promise.race([sb.auth.getSession(),new Promise(r=>setTimeout(()=>r({data:null,error:new Error('tiempo')}),8000))]))}catch(e){error=e}
  SES=(data&&data.session)||null;
+ if(RECUP&&SES)return mostrarNueva();
+ if(RECUP_ERR&&!SES)return mostrarLogin(RECUP_ERR);
  if(!SES){
   /* Teléfono ya enlazado pero sin conexión: se sigue trabajando aquí y todo sube al volver el internet */
   if(N.uid&&!N.salio&&(error||!navigator.onLine)){NE.error='Sin conexión con la nube.';return}
@@ -1473,7 +1587,19 @@ const A={
  exportar:()=>exportar(),
  importar:()=>$('#archivo').click(),
  nubeInfo:()=>nubeInfo(),
+ olvide:()=>olvide(),
  recTodos:()=>{REC_TODOS=!REC_TODOS;pintar()},
+ vistaC:v=>{VISTA_C=v;pintar();window.scrollTo(0,0)},
+ verInteresadas:()=>{VISTA_C='interesadas';irA('clientas')},
+ verCerradas:()=>{VER_CERRADAS=!VER_CERRADAS;pintar()},
+ editInt:id=>editInt(id),
+ intOp:(v,b)=>{INT_OP=v=='1';$$('[data-a=intOp]').forEach(x=>x.classList.toggle('on',x==b))},
+ intResp:id=>{const x=(D.interesadas||[]).find(v=>v.id==id);if(!x)return;x.respondida=true;guardar();aviso('Marcada como respondida')},
+ intNo:id=>{const x=(D.interesadas||[]).find(v=>v.id==id);if(!x)return;x.cerrada='no';x.respondida=true;guardar()},
+ intReabrir:id=>{const x=(D.interesadas||[]).find(v=>v.id==id);if(!x)return;x.cerrada='';guardar()},
+ intCompro:id=>intCompro(id),
+ borrarInt:id=>{const x=(D.interesadas||[]).find(v=>v.id==id);if(!x)return;
+  preguntar(`Vas a borrar a <b>${esc(nomInt(x))}</b> de las interesadas.`,'Sí, borrar',()=>{D.interesadas=D.interesadas.filter(v=>v.id!=id);guardar();aviso('Borrada')})},
  pfSug:(n,b)=>{const it=F.items[+n];if(!it)return;it.nombre=b.dataset.nom;F.avisado=false;pfItems()},
  unirNombres:()=>unirNombres(),
  unSel:k=>{UN.sel.has(k)?UN.sel.delete(k):UN.sel.add(k);unActualizar()},

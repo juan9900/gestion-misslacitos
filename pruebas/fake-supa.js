@@ -12,7 +12,7 @@ Q.prototype.upsert=function(rows){this.up=rows;return this};
 Q.prototype.run=function(){const s=load();
  if(s.down)return{data:null,error:{message:'TypeError: Failed to fetch'}};
  if(this.up){
-  const bad=this.up.find(r=>s.reject.includes(r.id)||!['productos','clientas','pedidos','movs','compras','ajustes'].includes(r.coleccion));
+  const bad=this.up.find(r=>s.reject.includes(r.id)||!(window.FAKE_COLS||['productos','clientas','pedidos','movs','compras','interesadas','ajustes']).includes(r.coleccion));
   if(bad)return{data:null,error:{code:'23514',message:'new row violates check constraint'}};
   this.up.forEach(r=>{s.clock++;s.rows[r.coleccion+':'+r.id]={coleccion:r.coleccion,id:r.id,data:JSON.parse(JSON.stringify(r.data)),borrado:!!r.borrado,actualizado:new Date(1.8e12+s.clock*1000).toISOString()}});
   save(s);return{data:null,error:null}}
@@ -32,6 +32,11 @@ window.supabase={createClient(){return{
    if(password!=='ok')return{data:{},error:{message:'Invalid login credentials'}};
    const ses={user:{id:'u-'+email,email}};localStorage.setItem('ml-sesion',JSON.stringify(ses));return{data:{session:ses},error:null}},
   async signOut(){localStorage.removeItem('ml-sesion');if(cb)cb('SIGNED_OUT',null);return{error:null}},
-  onAuthStateChange(f){cb=f;return{data:{subscription:{unsubscribe(){}}}}}
+  async resetPasswordForEmail(email,o){if(load().down)return{error:{message:'Failed to fetch'}};localStorage.setItem('FAKE_RESET',JSON.stringify({email,redirectTo:o&&o.redirectTo}));return{data:{},error:null}},
+  async updateUser({password}){const ses=getS();if(!ses)return{data:{},error:{message:'Auth session missing'}};localStorage.setItem('FAKE_PASS',password);return{data:{user:ses.user},error:null}},
+  onAuthStateChange(f){cb=f;
+   /* enlace de recuperación simulado: #access_token=...&type=recovery */
+   if(/type=recovery/.test(location.hash)){const ses={user:{id:'u-a@p.com',email:'a@p.com'}};localStorage.setItem('ml-sesion',JSON.stringify(ses));history.replaceState(null,'',location.pathname);setTimeout(()=>f('PASSWORD_RECOVERY',ses),0)}
+   return{data:{subscription:{unsubscribe(){}}}}}
  }}}};
 })();

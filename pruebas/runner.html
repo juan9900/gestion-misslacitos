@@ -307,6 +307,62 @@ async function T(nombre,fn){try{await fn()}catch(e){ok(nombre+' (excepción)',fa
   E("D.pedidos=D.pedidos.filter(p=>!['cv1','cv2','cv3'].includes(p.id));guardar();FILTRO='pend';irA('inicio')");
  });
 
+ await T('21 interesadas',async()=>{
+  await telefono('A');await wait(600);
+  E("A.verInteresadas()");
+  ok('21a pestaña Interesadas dentro de Clientas',!!q('.seg [data-id=interesadas].on'));
+  E('A.editInt()');enviar();ok('21b pide algún dato',hojaAbierta()&&/al menos/.test(errTxt()),errTxt());
+  pon('#sf [name=ig]','https://www.instagram.com/ana.lazos/?hl=es');pon('#sf [name=pregunta]','precio de los lazos');enviar();
+  ok('21c guarda y limpia el Instagram',!hojaAbierta()&&E("igHandle(D.interesadas.at(-1).ig)")=='ana.lazos',errTxt());
+  ok('21d enlace a su perfil',!!q('a[href="https://www.instagram.com/ana.lazos/"]'));
+  E('A.editInt()');pon('#sf [name=ig]','@no valido!');enviar();ok('21e rechaza un Instagram inválido',/no parece válido/.test(errTxt()),errTxt());E('cerrar()');
+  ok('21e2 instagram.com sin https también sirve',E("igHandle('instagram.com/miss_lacitoss')")=='miss_lacitoss');
+  ok('21f aparece en recordatorios',E("recordatorios().some(r=>/Responder a @ana.lazos/.test(r.tit))"));
+  const id=E('D.interesadas.at(-1).id');
+  E(`A.intResp('${id}')`);ok('21g marcar respondida la saca de recordatorios',!E("recordatorios().some(r=>/ana.lazos/.test(r.tit))"));
+  await wait(1500);await sync();ok('21h sube a la nube',Object.values(srv().rows).some(r=>r.coleccion=='interesadas'&&r.id==id));
+  const nc=E('D.clientas.length');
+  E(`A.intCompro('${id}')`);
+  ok('21i Hizo un pedido: crea la clienta y abre el pedido con ella',E('D.clientas.length')==nc+1&&hojaAbierta()&&E('cli(F.clienteId).ig')=='@ana.lazos',{c:E('D.clientas.length'),h:hojaAbierta()});
+  E('cerrar()');ok('21j queda cerrada como Compró',E(`D.interesadas.find(x=>x.id=='${id}').cerrada`)=='compro');
+  setSrv(s=>{});E("A.editInt()");pon('#sf [name=nombre]','Luisa');enviar();const id2=E('D.interesadas.at(-1).id');
+  E(`A.intCompro('${id2}')`);E('cerrar()');
+  ok('21k si ya existe la clienta no la duplica',E("D.clientas.filter(c=>c.nombre=='Luisa').length")==1);
+  E(`A.intCompro('${id2}')`);E('cerrar()');ok('21l repetir no duplica',E("D.clientas.filter(c=>c.nombre=='Luisa').length")==1);
+  E(`A.borrarInt('${id2}')`);enviar();ok('21m borrar',!E(`D.interesadas.some(x=>x.id=='${id2}')`));
+  E("VISTA_C='clientas';irA('inicio')");
+ });
+
+ await T('22 olvidé mi contraseña',async()=>{
+  await wait(1500);await sync();E('A.salir()');enviar();await wait(300);
+  ok('22a botón Olvidé mi contraseña',!!q('[data-a=olvide]'));
+  pon('#login-f [name=email]','');clic('[data-a=olvide]');await wait(100);
+  ok('22b pide el correo primero',/Escribe arriba tu correo/.test(q('#login-err').textContent),q('#login-err').textContent);
+  pon('#login-f [name=email]','a@p.com');clic('[data-a=olvide]');await wait(300);
+  const rs=JSON.parse(localStorage.getItem('FAKE_RESET')||'{}');
+  ok('22c envía el correo y vuelve a esta misma app',rs.email=='a@p.com'&&/index\.html$|\/$/.test(rs.redirectTo||'')&&/enviamos un correo/.test(q('#login-err').textContent),rs);
+  guardarTel(actual);
+  await new Promise(r=>{fr.onload=r;fr.src='index.html?r#access_token=x&type=recovery'});w=fr.contentWindow;d=w.document;await wait(900);
+  ok('22d el enlace del correo abre el formulario de contraseña nueva',!q('#nueva-f').hidden&&q('#login-f').hidden,{nueva:!q('#nueva-f').hidden});
+  pon('#nueva-f [name=c1]','abc');pon('#nueva-f [name=c2]','abc');q('#nueva-f').requestSubmit();await wait(150);
+  ok('22e contraseña corta rechazada',/al menos 6/.test(q('#nueva-err').textContent));
+  pon('#nueva-f [name=c1]','nueva123');pon('#nueva-f [name=c2]','otra123');q('#nueva-f').requestSubmit();await wait(150);
+  ok('22f deben coincidir',/no son iguales/.test(q('#nueva-err').textContent));
+  pon('#nueva-f [name=c2]','nueva123');q('#nueva-f').requestSubmit();await wait(900);
+  ok('22g guarda la contraseña y entra a la app',localStorage.getItem('FAKE_PASS')=='nueva123'&&q('#login').hidden&&!location.hash,{login:q('#login').hidden});
+  ok('22h conserva los datos',E('D.clientas.length')>0&&E('enNube()'));
+  await new Promise(r=>{fr.onload=r;fr.src='index.html?e#error=access_denied&error_code=otp_expired'});w=fr.contentWindow;d=w.document;
+  E("localStorage.removeItem('ml-sesion')");w.location.reload();await new Promise(r=>fr.onload=r);w=fr.contentWindow;d=w.document;await wait(600);
+  await abrir();await wait(300);
+ });
+
+ await T('23 enlace vencido',async()=>{
+  E("localStorage.removeItem('ml-sesion')");
+  await new Promise(r=>{fr.onload=r;fr.src='index.html?v#error=access_denied&error_code=otp_expired&error_description=Email+link+is+invalid+or+has+expired'});w=fr.contentWindow;d=w.document;await wait(900);
+  ok('23a avisa que el enlace venció',!q('#login').hidden&&/venció/.test(q('#login-err').textContent),q('#login-err').textContent);
+  await entrar();await wait(500);ok('23b se puede entrar normal',q('#login').hidden);
+ });
+
  await T('15 reportes PDF',async()=>{
   const lib=await Promise.race([E('(async()=>{for(const u of LIB_PDF)await cargarScript(u);return true})()'),wait(15000).then(()=>false)]).catch(()=>false);
   if(!lib){ok('15 PDF (sin internet para la librería, no se probó)',true);return}

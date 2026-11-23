@@ -29,11 +29,12 @@ App web para el celular, de un solo archivo, para manejar el emprendimiento Miss
 - La app guarda primero en el teléfono y después sube a la nube. Sin internet, los cambios esperan en cola. Nada se borra de verdad en la nube: queda marcado como borrado (`borrado = true`) y conserva su último contenido. Para recuperar algo borrado por error: `update public.registros set borrado = false where coleccion = '...' and id = '...';`
 - **Copia semanal automática:** cada lunes Supabase guarda una foto de todos los datos en la tabla `respaldos` (se conservan 90 días). Se descargan desde Inicio → Copia de seguridad. Protege contra errores que se propaguen a todos los teléfonos; no contra perder el proyecto entero, para eso sigue sirviendo la copia manual en archivo.
 - **Fotos de los pedidos:** carpeta privada `fotos` en Storage (solo miembros, máx. 2 MB). El pedido guarda solo la ruta; las fotos no se ven sin internet ni salen en PDF o WhatsApp.
+- **Avisos en el teléfono:** función `supabase/functions/avisos` (se despliega en Supabase sin verificación de JWT) y `supabase/avisos.sql`. Las claves VAPID se crean dentro de Supabase y solo las lee el servidor. Cada mañana a las 7 (Caracas) la tarea `ml-avisos-diarios` manda un resumen con cantidades y totales, sin nombres. En iPhone solo funciona con la app instalada en la pantalla de inicio.
 - **Reportes PDF** (pantalla Dinero): del mes, del año, de una clienta y con todo. Se arman en el teléfono.
 
 ## Pruebas
 
-`python pruebas/preparar.py` arma una copia con una nube simulada y la sirve en `http://127.0.0.1:8766/runner.html`. Ahí corren 180 comprobaciones (sincronización entre teléfonos, sin internet, validaciones, PDF). No tocan la base de datos real y no se publican en el sitio.
+`python pruebas/preparar.py` arma una copia con una nube simulada y la sirve en `http://127.0.0.1:8766/runner.html`. Ahí corren 190 comprobaciones (sincronización entre teléfonos, sin internet, validaciones, PDF). No tocan la base de datos real y no se publican en el sitio.
 
 ## Publicar en Netlify
 

@@ -655,7 +655,7 @@ const TITULOS={inicio:'Inicio',pedidos:'Pedidos',inventario:'Inventario',clienta
 $('#menu').innerHTML=SECC.map(([k,t,i])=>`<button data-a="tab" data-id="${k}">${ic(i)}${t}</button>`).join('');
 function irA(t){TAB=t;$$('#menu button').forEach(b=>b.classList.toggle('on',b.dataset.id==t));
  SECC.forEach(([k])=>$('#pg-'+k).hidden=k!=t);$('#titulo').textContent=TITULOS[t];pintar();window.scrollTo(0,0)}
-function pintar(){({inicio:pInicio,pedidos:pPedidos,inventario:pInventario,clientas:pClientas,dinero:pDinero})[TAB]();globo();if(TAB=='pedidos')pintarFotos();if(TAB=='inicio')respaldosHtml()}
+function pintar(){({inicio:pInicio,pedidos:pPedidos,inventario:pInventario,clientas:pClientas,dinero:pDinero})[TAB]();globo();if(TAB=='pedidos')pintarFotos();if(TAB=='inicio'){respaldosHtml();avisosHtml()}}
 /* numerito rojo en Inicio y en el icono de la app: cosas urgentes */
 function globo(){const n=recordatorios().filter(r=>r.u<=2).length,b=$('#menu [data-id=inicio]');if(!b)return;
  let g=b.querySelector('.globo');if(n){if(!g){g=document.createElement('span');g.className='globo';b.appendChild(g)}g.textContent=n>9?'9+':n}else if(g)g.remove();
@@ -869,6 +869,52 @@ function reciboEnviar(){if(!RECIBO)return;
  if(RECIBO.file&&navigator.canShare&&navigator.canShare({files:[RECIBO.file]})){navigator.share({files:[RECIBO.file],title:'Recibo Miss Lacitoss'}).catch(e=>{if(!e||e.name!='AbortError')descargar(RECIBO.blob,RECIBO.nombre)});return}
  descargar(RECIBO.blob,RECIBO.nombre)}
 
+/* ---------- AVISOS EN EL TELÉFONO (llegan aunque la app esté cerrada) ---------- */
+const esIOS=/iphone|ipad|ipod/i.test(navigator.userAgent);
+const instalada=()=>matchMedia('(display-mode: standalone)').matches||navigator.standalone===true;
+const pushPosible=()=>'serviceWorker' in navigator&&'PushManager' in window&&'Notification' in window;
+function b64u(t){const p='='.repeat((4-t.length%4)%4),r=atob((t+p).replace(/-/g,'+').replace(/_/g,'/'));return Uint8Array.from(r,c=>c.charCodeAt(0))}
+async function suscripcion(){try{const reg=await navigator.serviceWorker.getRegistration();return reg?await reg.pushManager.getSubscription():null}catch(e){return null}}
+async function avisosEstado(){
+ if(!pushPosible())return esIOS&&!instalada()?'instalar':'no';
+ if(Notification.permission=='denied')return'bloqueado';
+ return(await suscripcion())?'activo':'apagado'}
+async function avisosHtml(){const el=$('#avisos-box');if(!el||!enNube())return;const e=await avisosEstado();
+ const t={
+  activo:`<p class="sm" style="margin:0"><b style="color:var(--menta)">Activados en este teléfono.</b> Cada mañana a las 7 te llega un resumen: entregas del día, atrasados, interesadas sin responder y cuánto te deben.</p>
+   <div class="acts"><button class="mini" data-a="avisosProbar">${ic('check','s')}Probar</button><button class="mini" data-a="avisosApagar">Desactivar</button></div>`,
+  apagado:`<p class="sm" style="margin:0">Recibe cada mañana un resumen del día en este teléfono, aunque la app esté cerrada.</p>
+   <button class="btn caramelo c-limon" data-a="avisosActivar" style="margin-bottom:0">${ic('alerta')}Activar avisos</button>`,
+  instalar:`<p class="sm" style="margin:0">Para recibir avisos en el iPhone, primero instala la app: toca Compartir y luego «Agregar a inicio». Después ábrela desde ese icono y vuelve aquí.</p>`,
+  bloqueado:`<p class="sm" style="margin:0">Los avisos están bloqueados para esta app. Actívalos en los ajustes del teléfono (Notificaciones) y vuelve a abrirla.</p>`,
+  no:`<p class="sm" style="margin:0">Este navegador no permite avisos. Prueba con Chrome en Android, o instala la app en el iPhone.</p>`}[e];
+ el.innerHTML=t}
+async function avisosActivar(){
+ /* el permiso se pide justo después del toque (el iPhone lo exige así) */
+ let perm;try{perm=await Notification.requestPermission()}catch(e){perm='denied'}
+ if(perm!=='granted'){aviso('Para recibir avisos hay que tocar «Permitir».',true);return avisosHtml()}
+ aviso('Activando avisos…');
+ try{
+  const reg=await navigator.serviceWorker.ready;
+  const k=await sb.functions.invoke('avisos',{body:{modo:'clave'}});if(k.error||!k.data||!k.data.publica)throw new Error('sin clave');
+  let sub=await reg.pushManager.getSubscription();
+  if(!sub)sub=await reg.pushManager.subscribe({userVisibleOnly:true,applicationServerKey:b64u(k.data.publica)});
+  const j=sub.toJSON();
+  const up=await sb.from('push_subs').upsert({endpoint:j.endpoint,sub:j},{onConflict:'endpoint'});
+  if(up.error){await sub.unsubscribe().catch(()=>{});throw up.error}
+  await avisosProbar(true)}
+ catch(e){console.error(e);aviso(/fetch|network|Failed/i.test(String(e&&e.message))?'Sin conexión: intenta de nuevo con internet.':'No se pudieron activar los avisos. Intenta otra vez.',true)}
+ avisosHtml()}
+async function avisosProbar(nuevo){
+ const r=await sb.functions.invoke('avisos',{body:{modo:'prueba'}});
+ if(r.error||!r.data||!r.data.ok)aviso('No llegó el aviso de prueba. Revisa que las notificaciones de la app estén permitidas.',true);
+ else aviso(nuevo?'¡Avisos activados! Te llegó uno de prueba.':'Te mandé un aviso de prueba.')}
+/* al desactivar o al cerrar sesión: se borra este teléfono de la lista y se cancela la suscripción */
+async function avisosApagar(silencio){const sub=await suscripcion();if(!sub){if(!silencio)avisosHtml();return}
+ try{if(sb&&SES)await sb.from('push_subs').delete().eq('endpoint',sub.endpoint)}catch(e){}
+ try{await sub.unsubscribe()}catch(e){}
+ if(!silencio){aviso('Avisos desactivados en este teléfono');avisosHtml()}}
+
 /* ---------- LISTA DE COMPRAS ---------- */
 function comprasHtml(){
  const pend=D.compras.filter(c=>!c.hecho),hechas=D.compras.filter(c=>c.hecho);
@@ -937,7 +983,8 @@ function pInicio(){
  </div>
  ${deudoras.length?`<button class="link" data-a="verDeben" style="border-top:0;margin-top:0;color:var(--coral)">Me deben en total ${fmt(deudaTotal())} ${ic('der')}</button>
   <button class="btn plano" data-a="cobrarVarias" style="color:#5fdc8f;margin-top:4px">${ic('wa')}Cobrar a todas por WhatsApp</button>`:''}
- ${enNube()?`${titulo('Mis datos')}<div class="card" id="nube-card">${nubeCard()}</div>`:''}
+ ${enNube()?`${titulo('Mis datos')}<div class="card" id="nube-card">${nubeCard()}</div>
+  <div class="card"><div class="f" style="margin-top:0">${paso(0,'Avisos en este teléfono')}<div id="avisos-box" style="margin-top:6px"><p class="sm" style="margin:0">Revisando…</p></div></div></div>`:''}
  ${titulo('Copia de seguridad')}
  <div class="card"><p class="sm" style="margin:0;line-height:1.5">${enNube()?'Tus datos ya se guardan solos en la nube. Si quieres, también puedes guardar una copia en un archivo.':'Todo se guarda en este teléfono.'} ${enNube()?'':' Guarda una copia cada semana y envíatela por WhatsApp o correo, por si se pierde o se daña el teléfono.'}${D.copiaAt?`<br>Última copia: <b style="color:var(--ink)">${fe(D.copiaAt)}</b>`:''}</p>
   ${enNube()?`<div class="f" style="margin-top:14px">${paso(0,'Copias automáticas en la nube')}<small>Se hacen solas cada lunes y se guardan 3 meses. Puedes descargar una y recuperarla con «Recuperar una copia».</small><div id="respaldos" style="margin-top:6px"><p class="sm" style="margin:0">Cargando…</p></div></div>`:''}
@@ -1831,6 +1878,9 @@ const A={
  vistaP:v=>{VISTA_P=v;SEM=0;pintar();window.scrollTo(0,0)},
  sem:d=>{SEM+=+d;pintar()},
  fotoAdd:id=>fotoAdd(id),
+ avisosActivar:()=>avisosActivar(),
+ avisosProbar:()=>avisosProbar(false),
+ avisosApagar:()=>avisosApagar(false),
  fotoVer:(id,b)=>fotoVer(id,b.dataset.ruta),
  fotoQuitar:(id,b)=>fotoQuitar(id,b.dataset.ruta),
  respaldoBajar:id=>respaldoBajar(id),
@@ -1873,7 +1923,7 @@ const A={
  nubeAhora:async()=>{await subir();await bajar();aviso(NE.error?NE.error:'Todo revisado',!!NE.error)},
  nubeElegir:(id,b)=>{$$('[data-a=nubeElegir]').forEach(x=>x.classList.toggle('on',x==b))},
  salir:()=>{if(nPend())return aviso('Espera: hay cambios sin subir. Conéctate a internet y espera a que diga Guardado.',true);
-  preguntar('Vas a cerrar sesión en este teléfono. Tus datos siguen guardados en la nube.','Sí, cerrar sesión',()=>{sb.auth.signOut()},'c-coral')},
+  preguntar('Vas a cerrar sesión en este teléfono. Tus datos siguen guardados en la nube.','Sí, cerrar sesión',async()=>{await avisosApagar(true);sb.auth.signOut()},'c-coral')},
  repMes:()=>repMes(),repAnio:()=>repAnio(),repTodo:()=>repTodo(),
  repCli:id=>{if(!$('#ov').hidden)cerrar();repCli(id)},repCliElegir:()=>repCliElegir(),
 };

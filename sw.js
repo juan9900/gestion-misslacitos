@@ -1,5 +1,5 @@
 // Permite abrir la app sin internet. Cambia VERSION cuando publiques cambios.
-const VERSION = 'ml-v15';
+const VERSION = 'ml-v16';
 const BASE = ['./', 'index.html', 'config.js', 'manifest.webmanifest', 'icon-180.png', 'icon-192.png', 'icon-512.png'];
 // Librerías y fuentes (con versión fija): se guardan la primera vez que se usan.
 const CDN = [
@@ -59,4 +59,28 @@ self.addEventListener('fetch', e => {
       new Promise(r => setTimeout(() => r(guardado), 3000))
     ]);
   })());
+});
+
+// Avisos que manda el servidor (resumen del día o de prueba)
+self.addEventListener('push', e => {
+  let d = {};
+  try { d = e.data ? e.data.json() : {}; } catch (_) { d = { body: e.data ? e.data.text() : '' }; }
+  e.waitUntil(self.registration.showNotification(d.title || 'Miss Lacitoss', {
+    body: d.body || 'Tienes cosas pendientes hoy.',
+    icon: 'icon-192.png',
+    badge: 'icon-192.png',
+    tag: 'resumen',
+    renotify: true,
+    data: { url: d.url || './' }
+  }));
+});
+
+// Al tocar el aviso se abre la app (o se trae al frente si ya estaba abierta)
+self.addEventListener('notificationclick', e => {
+  e.notification.close();
+  const destino = new URL((e.notification.data && e.notification.data.url) || './', self.registration.scope).href;
+  e.waitUntil(self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then(ws => {
+    for (const w of ws) { if (w.url.startsWith(self.registration.scope) && 'focus' in w) return w.focus(); }
+    return self.clients.openWindow(destino);
+  }));
 });

@@ -506,6 +506,31 @@ async function T(nombre,fn){try{await fn()}catch(e){ok(nombre+' (excepción)',fa
   E("D.movs=D.movs.filter(m=>m.id!='rcm1');D.pedidos=D.pedidos.filter(p=>p.id!='rc1');guardar();FILTRO='pend';irA('inicio')");
  });
 
+ await T('30 avisos en el teléfono',async()=>{
+  await telefono('A');await wait(600);
+  /* teléfono simulado: permiso, service worker y suscripción de mentira */
+  let sub=null;const pm={async getSubscription(){return sub},async subscribe(o){sub={endpoint:'https://push.ejemplo/abc',toJSON(){return{endpoint:this.endpoint,keys:{p256dh:'x',auth:'y'}}},async unsubscribe(){sub=null;return true},clave:o.applicationServerKey};return sub}};
+  const reg={pushManager:pm};
+  Object.defineProperty(w.navigator,'serviceWorker',{configurable:true,value:{ready:Promise.resolve(reg),async getRegistration(){return reg}}});
+  w.PushManager=w.PushManager||function(){};let pedido=0;w.Notification={permission:'default',async requestPermission(){pedido++;this.permission='granted';return'granted'}};
+  E("irA('inicio')");await wait(300);
+  ok('30a Inicio ofrece activar avisos',/Activar avisos/.test(q('#avisos-box').textContent),q('#avisos-box').textContent);
+  clic('[data-a=avisosActivar]');for(let i=0;i<20&&!/Activados/.test(q('#avisos-box').textContent);i++)await wait(150);
+  ok('30b pide permiso al tocar',pedido==1);
+  ok('30c se suscribe con la clave pública del servidor',sub&&sub.clave instanceof w.Uint8Array&&sub.clave[0]==4&&sub.clave.length==65,sub&&sub.clave&&sub.clave.length);
+  ok('30d guarda este teléfono en la nube',JSON.parse(localStorage.getItem('FAKE_SUBS')||'[]').some(x=>x.endpoint=='https://push.ejemplo/abc'));
+  ok('30e manda un aviso de prueba',JSON.parse(localStorage.getItem('FAKE_FN')||'[]').some(x=>x.modo=='prueba')&&/Te llegó uno de prueba/.test(q('#toast').textContent),q('#toast').textContent);
+  ok('30f muestra que están activados',/Activados en este teléfono/.test(q('#avisos-box').textContent));
+  clic('[data-a=avisosApagar]');for(let i=0;i<20&&sub;i++)await wait(100);
+  ok('30g desactivar borra la suscripción y el teléfono de la nube',!sub&&!JSON.parse(localStorage.getItem('FAKE_SUBS')||'[]').length);
+  clic('[data-a=avisosActivar]');for(let i=0;i<20&&!sub;i++)await wait(150);await wait(300);
+  await wait(1500);await sync();E('A.salir()');enviar();for(let i=0;i<20&&sub;i++)await wait(150);
+  ok('30h al cerrar sesión se quitan los avisos de este teléfono',!sub&&!JSON.parse(localStorage.getItem('FAKE_SUBS')||'[]').length,{sub:!!sub});
+  w.Notification.permission='denied';await entrar();await wait(500);E("irA('inicio')");await wait(300);
+  ok('30i si el permiso está bloqueado lo explica',/bloqueados/.test(q('#avisos-box').textContent),q('#avisos-box').textContent);
+  ok('30j convierte la clave base64url bien',E("b64u('BENSS1_ktHoq'+'A'.repeat(75)).length")==65);
+ });
+
  await T('15 reportes PDF',async()=>{
   const lib=await Promise.race([E('(async()=>{for(const u of LIB_PDF)await cargarScript(u);return true})()'),wait(15000).then(()=>false)]).catch(()=>false);
   if(!lib){ok('15 PDF (sin internet para la librería, no se probó)',true);return}

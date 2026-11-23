@@ -20,6 +20,9 @@ Q.prototype.run=function(){const s=load();
  if(this.opts.head)return{count:rows.length,data:null,error:null};
  return{data:JSON.parse(JSON.stringify(rows.slice(0,this.lim))),error:null}};
 Q.prototype.then=function(ok,mal){return Promise.resolve().then(()=>this.run()).then(ok,mal)};
+function subsTabla(){const L=()=>JSON.parse(localStorage.getItem('FAKE_SUBS')||'[]'),G=x=>localStorage.setItem('FAKE_SUBS',JSON.stringify(x));
+ return{async upsert(f){const l=L().filter(x=>x.endpoint!=f.endpoint);l.push(f);G(l);return{error:null}},
+  delete(){return{async eq(c,v){G(L().filter(x=>x[c]!=v));return{error:null}}}}}}
 /* copias automáticas simuladas: una copia hecha "el lunes" con lo que hay en la nube */
 function R(){this.uno=false;this.idv=null}
 R.prototype.select=function(){return this};R.prototype.order=function(){return this};R.prototype.limit=function(){return this};
@@ -31,7 +34,10 @@ R.prototype.then=function(ok,mal){return Promise.resolve().then(()=>{const s=loa
 let cb=null;
 const getS=()=>{try{return JSON.parse(localStorage.getItem('ml-sesion'))}catch(e){return null}};
 window.supabase={createClient(){return{
- from:(tabla)=>tabla=='respaldos'?new R():new Q(),
+ from:(tabla)=>tabla=='respaldos'?new R():tabla=='push_subs'?subsTabla():new Q(),
+ functions:{async invoke(nombre,{body}){const L=JSON.parse(localStorage.getItem('FAKE_FN')||'[]');L.push(body);localStorage.setItem('FAKE_FN',JSON.stringify(L));
+  if(body.modo=='clave')return{data:{publica:'BENSS1_ktHoq'+'A'.repeat(75)},error:null};
+  if(body.modo=='prueba')return{data:{ok:JSON.parse(localStorage.getItem('FAKE_SUBS')||'[]').length,total:1},error:null};return{data:null,error:{message:'?'}}}},
  storage:{from:()=>({
   async upload(ruta,blob){if(load().down)return{error:{message:'Failed to fetch'}};const u=await new Promise(r=>{const f=new FileReader();f.onload=()=>r(f.result);f.readAsDataURL(blob)});
    const F=JSON.parse(localStorage.getItem('FAKE_FILES')||'{}');F[ruta]=u;localStorage.setItem('FAKE_FILES',JSON.stringify(F));return{data:{path:ruta},error:null}},

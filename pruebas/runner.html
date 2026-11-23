@@ -420,6 +420,43 @@ async function T(nombre,fn){try{await fn()}catch(e){ok(nombre+' (excepción)',fa
   E("D.movs=D.movs.filter(m=>!['bs1','bs2'].includes(m.pedidoId)&&m.id!='"+idg+"');D.pedidos=D.pedidos.filter(p=>!['bs1','bs2'].includes(p.id));guardar();irA('inicio')");
  });
 
+ await T('26 fotos del pedido',async()=>{
+  await telefono('A');await wait(600);
+  E(`D.pedidos.push({id:'ft1',clienteId:D.clientas[0].id,items:[{pid:'',nombre:'Toalla',cant:1,precio:1000}],total:1000,pagoPrevio:1000,detalle:'',entrega:'',entregado:false,fecha:hoy()});guardar()`);
+  E("FILTRO='todos';irA('pedidos')");
+  ok('26a botón de foto en el pedido',!!q('#p-ft1 [data-a=fotoAdd]'));
+  const cv=d.createElement('canvas');cv.width=1600;cv.height=900;const g=cv.getContext('2d');g.fillStyle='#f4a';g.fillRect(0,0,1600,900);
+  const blob=await new Promise(r=>cv.toBlob(r,'image/png'));const file=new w.File([blob],'IMG_0001.png',{type:'image/png'});
+  E("FOTO_PED='ft1'");const dt=new w.DataTransfer();dt.items.add(file);q('#foto-in').files=dt.files;q('#foto-in').dispatchEvent(new w.Event('change'));for(let i=0;i<40&&!E("(ped('ft1').fotos||[]).length");i++)await wait(250);
+  const fotos=E("ped('ft1').fotos||[]");
+  ok('26b la foto se sube y el pedido guarda solo la ruta',fotos.length==1&&/^p\/[a-z0-9]+\.jpg$/.test(fotos[0])&&!/data:/.test(localStorage.getItem('negocio')),fotos);
+  const F=JSON.parse(localStorage.getItem('FAKE_FILES')||'{}'),u=F[fotos[0]]||'';
+  ok('26c se comprime a JPEG',u.startsWith('data:image/jpeg'),u.slice(0,30));
+  const im=await new Promise(r=>{const i=new Image();i.onload=()=>r(i);i.onerror=()=>r({width:0,height:0});if(!u)return r({width:0,height:0});i.src=u});ok('26d máximo 1280 px',im.width==1280&&im.height==720,{w:im.width,h:im.height});
+  await wait(300);ok('26e aparece la miniatura',!!q('#p-ft1 .fotos [data-ruta]')&&/url\(/.test(q('#p-ft1 .fotos [data-ruta]').style.backgroundImage));
+  clic('#p-ft1 .fotos [data-ruta]');await wait(300);ok('26f se ve en grande',hojaAbierta()&&/^data:image\/jpeg/.test(q('#foto-grande').src));
+  clic('[data-a=fotoQuitar]');enviar();await wait(400);
+  ok('26g quitar la foto la borra de la nube y del pedido',E("(ped('ft1').fotos||[]).length")==0&&!JSON.parse(localStorage.getItem('FAKE_FILES')||'{}')[fotos[0]]);
+  setSrv(s=>s.down=true);E("FOTO_PED='ft1'");const dt3=new w.DataTransfer();dt3.items.add(file);q('#foto-in').files=dt3.files;q('#foto-in').dispatchEvent(new w.Event('change'));for(let i=0;i<40&&!/foto no se subió/.test(q('#toast').textContent);i++)await wait(250);
+  ok('26h si se corta la conexión al subir: avisa y el pedido queda igual',/Sin conexión: la foto no se subió/.test(q('#toast').textContent)&&E("(ped('ft1').fotos||[]).length")==0,q('#toast').textContent);
+  setSrv(s=>s.down=false);
+  const bad=new w.File([new Uint8Array([1,2,3])],'roto.heic',{type:'image/heic'});const dt2=new w.DataTransfer();dt2.items.add(bad);
+  E("FOTO_PED='ft1'");q('#foto-in').files=dt2.files;q('#foto-in').dispatchEvent(new w.Event('change'));for(let i=0;i<40&&!/No pude abrir/.test(q('#toast').textContent);i++)await wait(250);
+  ok('26i una foto que no se puede abrir da un mensaje claro',/No pude abrir esa foto/.test(q('#toast').textContent),q('#toast').textContent);
+  E("D.pedidos=D.pedidos.filter(p=>p.id!='ft1');guardar();FILTRO='pend';irA('inicio')");
+ });
+
+ await T('27 copias automáticas',async()=>{
+  await wait(600);
+  ok('27a Inicio muestra las copias automáticas',/Copias automáticas en la nube/.test(q('#pg-inicio').textContent)&&!!q('#respaldos [data-a=respaldoBajar]'),q('#respaldos')&&q('#respaldos').textContent);
+  const c0=w.HTMLAnchorElement.prototype.click;let bajado=null;w.HTMLAnchorElement.prototype.click=function(){if(this.download){bajado={n:this.download,u:this.href};return}return c0.call(this)};
+  clic('#respaldos [data-a=respaldoBajar]');await wait(600);
+  ok('27b descarga la copia como archivo',bajado&&/nube\.json$/.test(bajado.n),bajado);
+  const txt=bajado?await (await fetch(bajado.u)).text():'{}';const o=JSON.parse(txt);
+  ok('27c el archivo sirve para «Recuperar una copia»',o.v===2&&Array.isArray(o.pedidos)&&o.clientas.length>0&&Array.isArray(o.compras),Object.keys(o));
+  w.HTMLAnchorElement.prototype.click=c0;
+ });
+
  await T('15 reportes PDF',async()=>{
   const lib=await Promise.race([E('(async()=>{for(const u of LIB_PDF)await cargarScript(u);return true})()'),wait(15000).then(()=>false)]).catch(()=>false);
   if(!lib){ok('15 PDF (sin internet para la librería, no se probó)',true);return}

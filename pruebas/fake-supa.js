@@ -20,10 +20,24 @@ Q.prototype.run=function(){const s=load();
  if(this.opts.head)return{count:rows.length,data:null,error:null};
  return{data:JSON.parse(JSON.stringify(rows.slice(0,this.lim))),error:null}};
 Q.prototype.then=function(ok,mal){return Promise.resolve().then(()=>this.run()).then(ok,mal)};
+/* copias automáticas simuladas: una copia hecha "el lunes" con lo que hay en la nube */
+function R(){this.uno=false;this.idv=null}
+R.prototype.select=function(){return this};R.prototype.order=function(){return this};R.prototype.limit=function(){return this};
+R.prototype.eq=function(c,v){this.idv=v;return this};R.prototype.single=function(){this.uno=true;return this};
+R.prototype.then=function(ok,mal){return Promise.resolve().then(()=>{const s=load();
+ const datos=Object.values(s.rows).filter(r=>!r.borrado).map(r=>({coleccion:r.coleccion,id:r.id,data:r.data}));
+ const fila={id:1,creado:'2026-11-23T10:00:00+00:00',filas:datos.length};
+ return this.uno?{data:{creado:fila.creado,datos},error:null}:{data:[fila],error:null}}).then(ok,mal)};
 let cb=null;
 const getS=()=>{try{return JSON.parse(localStorage.getItem('ml-sesion'))}catch(e){return null}};
 window.supabase={createClient(){return{
- from:()=>new Q(),
+ from:(tabla)=>tabla=='respaldos'?new R():new Q(),
+ storage:{from:()=>({
+  async upload(ruta,blob){if(load().down)return{error:{message:'Failed to fetch'}};const u=await new Promise(r=>{const f=new FileReader();f.onload=()=>r(f.result);f.readAsDataURL(blob)});
+   const F=JSON.parse(localStorage.getItem('FAKE_FILES')||'{}');F[ruta]=u;localStorage.setItem('FAKE_FILES',JSON.stringify(F));return{data:{path:ruta},error:null}},
+  async createSignedUrl(ruta){const F=JSON.parse(localStorage.getItem('FAKE_FILES')||'{}');return F[ruta]?{data:{signedUrl:F[ruta]},error:null}:{data:null,error:{message:'Object not found'}}},
+  async remove(rutas){if(load().down)return{error:{message:'Failed to fetch'}};const F=JSON.parse(localStorage.getItem('FAKE_FILES')||'{}');rutas.forEach(r=>delete F[r]);localStorage.setItem('FAKE_FILES',JSON.stringify(F));return{data:[],error:null}}
+ })},
  auth:{
   async getSession(){const s=load(),ses=getS();
    if(s.down)return ses&&ses.expirada?{data:{session:null},error:{message:'Failed to fetch'}}:{data:{session:ses},error:null};

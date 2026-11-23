@@ -345,6 +345,15 @@ nav button{position:relative}
 .bs-res{margin-top:10px}
 .bs-res b{color:var(--menta)}
 
+/* ---------- fotos y copias en la nube ---------- */
+.fotos{display:flex;gap:8px;overflow-x:auto;margin-top:10px;padding-bottom:2px;scrollbar-width:none}
+.fotos::-webkit-scrollbar{display:none}
+.fotos button{flex:none;width:72px;height:72px;border-radius:14px;border:1px solid var(--line2);background:var(--hondo) center/cover no-repeat;padding:0}
+.foto-grande{display:block;width:100%;max-height:60vh;object-fit:contain;border-radius:16px;background:var(--hondo);margin-top:6px}
+.respaldo{display:flex;align-items:center;gap:10px;padding:9px 0;border-bottom:1px dashed var(--line)}
+.respaldo:last-child{border-bottom:0}
+.respaldo span{flex:1;min-width:0}
+
 /* ---------- nube ---------- */
 .nube{margin-left:auto;flex:none;display:inline-flex;align-items:center;gap:6px;min-height:40px;padding:6px 12px;border-radius:30px;border:1.5px solid var(--line2);background:var(--card);color:var(--t,var(--muted));font-weight:800;font-size:13px}
 .nube .i{width:20px;height:20px}
@@ -419,6 +428,7 @@ nav button{position:relative}
  </form>
 </div></div>
 <script src="config.js"></script>
+<input type="file" id="foto-in" accept="image/*" hidden>
 <input type="file" id="archivo" accept=".json,application/json" hidden>
 
 <script>
@@ -473,6 +483,7 @@ const P={
  salir:'<path d="M14.5 4.5h4a1.5 1.5 0 0 1 1.5 1.5v12a1.5 1.5 0 0 1-1.5 1.5h-4"/><path d="M10 16.5 5.5 12 10 7.5M5.5 12H15"/>',
  pdf:'<path d="M6 3.5h8.5l4 4v13H6z"/><path d="M14 3.5V8h4.5"/><path d="M9 13h6M9 16.5h6"/>',
  sync:'<path d="M19.5 9A7.5 7.5 0 0 0 5.3 7.5M4.5 15a7.5 7.5 0 0 0 14.2 1.5"/><path d="M19.8 4v5h-5M4.2 20v-5h5"/>',
+ camara:'<path d="M4 8.5a2 2 0 0 1 2-2h2l1.5-2h5l1.5 2h2a2 2 0 0 1 2 2V18a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V8.5Z"/><circle cx="12" cy="13" r="3.6"/>',
  chat:'<path d="M4 18.5V6.5a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H8.5L4 20.5v-2Z"/><path d="M8.5 9.5h7M8.5 12.5h4.5"/>',
 };
 const ic=(n,c='')=>`<svg class="i ${c}" viewBox="0 0 24 24" aria-hidden="true">${P[n]||''}</svg>`;
@@ -627,7 +638,7 @@ const TITULOS={inicio:'Inicio',pedidos:'Pedidos',inventario:'Inventario',clienta
 $('#menu').innerHTML=SECC.map(([k,t,i])=>`<button data-a="tab" data-id="${k}">${ic(i)}${t}</button>`).join('');
 function irA(t){TAB=t;$$('#menu button').forEach(b=>b.classList.toggle('on',b.dataset.id==t));
  SECC.forEach(([k])=>$('#pg-'+k).hidden=k!=t);$('#titulo').textContent=TITULOS[t];pintar();window.scrollTo(0,0)}
-function pintar(){({inicio:pInicio,pedidos:pPedidos,inventario:pInventario,clientas:pClientas,dinero:pDinero})[TAB]();globo()}
+function pintar(){({inicio:pInicio,pedidos:pPedidos,inventario:pInventario,clientas:pClientas,dinero:pDinero})[TAB]();globo();if(TAB=='pedidos')pintarFotos();if(TAB=='inicio')respaldosHtml()}
 /* numerito rojo en Inicio y en el icono de la app: cosas urgentes */
 function globo(){const n=recordatorios().filter(r=>r.u<=2).length,b=$('#menu [data-id=inicio]');if(!b)return;
  let g=b.querySelector('.globo');if(n){if(!g){g=document.createElement('span');g.className='globo';b.appendChild(g)}g.textContent=n>9?'9+':n}else if(g)g.remove();
@@ -730,6 +741,57 @@ function cobrarVarias(){
 }
 document.addEventListener('click',e=>{const a=e.target.closest('a.cobwa');if(a)a.closest('.cob').classList.add('hecho')});
 
+/* ---------- FOTOS DEL PEDIDO (privadas, en la nube; el pedido solo guarda la ruta) ---------- */
+const FOTO_URL={};let FOTO_PED='';
+async function urlFoto(ruta){const c=FOTO_URL[ruta];if(c&&c.vence>Date.now())return c.url;
+ const{data,error}=await sb.storage.from('fotos').createSignedUrl(ruta,3600);if(error||!data)throw error||new Error('sin url');
+ FOTO_URL[ruta]={url:data.signedUrl,vence:Date.now()+50*60*1000};return data.signedUrl}
+/* después de pintar, pone las miniaturas (las fotos no se ven sin internet) */
+function pintarFotos(){if(!enNube()||!navigator.onLine)return;$$('.fotos [data-ruta]').forEach(b=>{if(b.dataset.listo)return;b.dataset.listo='1';
+ urlFoto(b.dataset.ruta).then(u=>{b.style.backgroundImage=`url("${u}")`}).catch(()=>{b.dataset.listo=''})})}
+const fotosHtml=p=>(p.fotos&&p.fotos.length)?`<div class="fotos">${p.fotos.map(r=>`<button type="button" data-a="fotoVer" data-id="${p.id}" data-ruta="${esc(r)}" aria-label="Ver foto">${''}</button>`).join('')}</div>`:'';
+/* reduce la foto (máx. 1280 px, JPEG) antes de subirla */
+async function comprimir(file){
+ let img;try{img=await createImageBitmap(file)}catch(e){img=await new Promise((ok,mal)=>{const i=new Image();i.onload=()=>ok(i);i.onerror=mal;i.src=URL.createObjectURL(file)})}
+ const k=Math.min(1,1280/Math.max(img.width,img.height)),c=document.createElement('canvas');c.width=Math.round(img.width*k);c.height=Math.round(img.height*k);
+ c.getContext('2d').drawImage(img,0,0,c.width,c.height);
+ return await new Promise((ok,mal)=>c.toBlob(b=>b?ok(b):mal(new Error('no se pudo')),'image/jpeg',0.78))}
+function fotoAdd(id){const p=ped(id);if(!p)return;
+ if(!enNube())return aviso('Las fotos se guardan en la nube: entra con tu cuenta primero.',true);
+ if(!navigator.onLine)return aviso('Necesitas internet para agregar una foto.',true);
+ if((p.fotos||[]).length>=6)return aviso('Ese pedido ya tiene 6 fotos. Quita una para agregar otra.',true);
+ FOTO_PED=id;$('#foto-in').value='';$('#foto-in').click()}
+$('#foto-in').addEventListener('change',async e=>{const f=e.target.files[0],p=ped(FOTO_PED);e.target.value='';if(!f||!p)return;
+ aviso('Subiendo la foto…');let blob;
+ try{blob=await comprimir(f)}catch(x){return aviso('No pude abrir esa foto. Prueba con otra o toma una captura de pantalla de ella.',true)}
+ const ruta='p/'+uid()+uid()+'.jpg';
+ try{const{error}=await sb.storage.from('fotos').upload(ruta,blob,{contentType:'image/jpeg',upsert:false});if(error)throw error}
+ catch(x){return aviso(/fetch|network|Failed/i.test(String(x&&x.message||x))?'Sin conexión: la foto no se subió.':'No se pudo subir la foto. Intenta otra vez.',true)}
+ const q=ped(FOTO_PED);if(!q){sb.storage.from('fotos').remove([ruta]).catch(()=>{});return}
+ q.fotos=[...(q.fotos||[]),ruta];guardar();aviso('Foto guardada')});
+async function fotoVer(id,ruta){const p=ped(id);if(!p)return;
+ hoja('Foto del pedido',`<p class="sm" style="margin:0">${esc(nomCli(p))} · ${esc(p.items.map(i=>i.cant+' '+i.nombre).join(', '))}</p>
+  <img class="foto-grande" id="foto-grande" alt="Foto del pedido">
+  <button type="button" class="btn plano" data-a="fotoQuitar" data-id="${p.id}" data-ruta="${esc(ruta)}" style="margin-top:16px;color:var(--coral)">${ic('basura')}Quitar esta foto</button>`,{sinBoton:true});
+ try{$('#foto-grande').src=await urlFoto(ruta)}catch(e){const i=$('#foto-grande');if(i)i.replaceWith(Object.assign(document.createElement('div'),{className:'nota',textContent:'No se pudo cargar la foto. Revisa el internet.'}))}}
+function fotoQuitar(id,ruta){const p=ped(id);if(!p)return;
+ preguntar('Vas a quitar esta foto del pedido.','Sí, quitar',async()=>{
+  try{const{error}=await sb.storage.from('fotos').remove([ruta]);if(error)throw error}catch(e){return aviso('No se pudo quitar la foto. Revisa el internet.',true)}
+  p.fotos=(p.fotos||[]).filter(r=>r!=ruta);delete FOTO_URL[ruta];guardar();aviso('Foto quitada')})}
+
+/* ---------- COPIAS AUTOMÁTICAS EN LA NUBE (las hace Supabase cada lunes) ---------- */
+async function respaldosHtml(){const el=$('#respaldos');if(!el||!enNube()||!navigator.onLine)return;
+ try{const{data,error}=await sb.from('respaldos').select('id,creado,filas').order('id',{ascending:false}).limit(5);if(error)throw error;
+  el.innerHTML=data.length?data.map(r=>`<div class="respaldo"><span><b>${fe(r.creado.slice(0,10))}</b><span class="sm"> · ${plural(r.filas,'registro','registros')}</span></span>
+   <button type="button" class="mini" data-a="respaldoBajar" data-id="${r.id}">${ic('bajar','s')}Descargar</button></div>`).join(''):'<p class="sm" style="margin:0">Todavía no hay copias automáticas.</p>'}
+ catch(e){el.innerHTML='<p class="sm" style="margin:0">No se pudieron ver las copias ahora.</p>'}}
+async function respaldoBajar(id){aviso('Preparando la copia…');
+ try{const{data,error}=await sb.from('respaldos').select('creado,datos').eq('id',+id).single();if(error)throw error;
+  const n=vacio();(data.datos||[]).forEach(r=>{if(r.coleccion=='ajustes'){if(r.data&&r.data.cats)n.cats=r.data.cats}else if(Array.isArray(n[r.coleccion]))n[r.coleccion].push(r.data)});
+  const nombre='copia-miss-lacitoss-'+data.creado.slice(0,10)+'-nube.json';
+  descargar(new Blob([JSON.stringify(n)],{type:'application/json'}),nombre)}
+ catch(e){aviso('No se pudo descargar la copia. Revisa el internet.',true)}}
+
 /* ---------- LISTA DE COMPRAS ---------- */
 function comprasHtml(){
  const pend=D.compras.filter(c=>!c.hecho),hechas=D.compras.filter(c=>c.hecho);
@@ -801,6 +863,7 @@ function pInicio(){
  ${enNube()?`${titulo('Mis datos')}<div class="card" id="nube-card">${nubeCard()}</div>`:''}
  ${titulo('Copia de seguridad')}
  <div class="card"><p class="sm" style="margin:0;line-height:1.5">${enNube()?'Tus datos ya se guardan solos en la nube. Si quieres, también puedes guardar una copia en un archivo.':'Todo se guarda en este teléfono.'} ${enNube()?'':' Guarda una copia cada semana y envíatela por WhatsApp o correo, por si se pierde o se daña el teléfono.'}${D.copiaAt?`<br>Última copia: <b style="color:var(--ink)">${fe(D.copiaAt)}</b>`:''}</p>
+  ${enNube()?`<div class="f" style="margin-top:14px">${paso(0,'Copias automáticas en la nube')}<small>Se hacen solas cada lunes y se guardan 3 meses. Puedes descargar una y recuperarla con «Recuperar una copia».</small><div id="respaldos" style="margin-top:6px"><p class="sm" style="margin:0">Cargando…</p></div></div>`:''}
   <button class="btn caramelo c-cielo" data-a="exportar">${ic('bajar')}Guardar copia</button>
   <button class="btn plano" data-a="importar" style="margin-bottom:0">${ic('subir')}Recuperar una copia</button></div>
  ${instalarTxt()}`;
@@ -842,6 +905,7 @@ function cardPedido(p){
   ${p.entregado?`<span class="tag t-menta">${ic('check','s')}Entregado</span>`:etapaDe(p)=='listo'&&!(p.entrega&&diasHasta(p.entrega)<0)?`<span class="tag t-menta">${ic('check','s')}Listo</span>`:p.entrega?entregaTag(p.entrega):'<span class="tag t-durazno">Por entregar</span>'}</div>
  <ul class="its">${p.items.map(i=>`<li><span>${i.cant} × ${esc(i.nombre)}</span><span>${fmt(i.precio*i.cant)}</span></li>`).join('')}</ul>
  ${p.detalle?`<div class="det">${ic('nota','s')}<span>${esc(p.detalle)}</span></div>`:''}
+ ${fotosHtml(p)}
  ${p.entrega&&!p.entregado?`<div class="meta"><span>${ic('cal','s')}Entregar el ${fe(p.entrega)}</span></div>`:''}
  ${p.entregado?'':(()=>{const e=etapaDe(p),i=ETAPAS.findIndex(x=>x[0]==e);
   return`<div class="etapas" role="group" aria-label="Etapa del pedido">${ETAPAS.map(([k,t,ico],j)=>`<button type="button" class="${k==e?'on '+k:j<i?'hecha':''}" data-a="etapa" data-id="${p.id}" data-e="${k}">${ic(ico,'s')}${t}</button>`).join('')}</div>`})()}
@@ -851,6 +915,7 @@ function cardPedido(p){
   ${d>0?`<button class="mini caramelo c-menta" data-a="cobrar" data-id="${p.id}">${ic('dinero','s')}Cobrar</button>`:''}
   <button class="mini" data-a="entregar" data-id="${p.id}">${p.entregado?ic('deshacer','s')+'No lo he entregado':ic('entregar','s')+'Ya lo entregué'}</button>
   ${c&&c.tel?`<button class="mini" data-a="waPedido" data-id="${p.id}" style="color:#5fdc8f">${ic('wa','s')}WhatsApp</button>`:''}
+  ${enNube()?`<button class="mini ico" data-a="fotoAdd" data-id="${p.id}" aria-label="Agregar foto">${ic('camara','s')}</button>`:''}
   <button class="mini ico" data-a="editPedido" data-id="${p.id}" aria-label="Editar">${ic('lapiz','s')}</button>
   <button class="mini ico borrar" data-a="borrarPedido" data-id="${p.id}" aria-label="Borrar">${ic('basura','s')}</button>
  </div></article>`}
@@ -1627,7 +1692,7 @@ const A={
   aviso(p.entregado?(debe(p)>0?'Entregado. Ojo: todavía debe '+fmt(debe(p)):'¡Entregado!'):'Marcado como por entregar')},
  borrarPedido:id=>{const p=ped(id),pagos=D.movs.filter(m=>m.pedidoId==id);
   preguntar(`Vas a borrar el pedido de <b>${esc(nomCli(p))}</b> (${fmt(p.total)}).${pagos.length?`<br><br>También se borran los ${plural(pagos.length,'pago','pagos')} que anotaste de este pedido.`:''}<br><br>Los productos vuelven al inventario.`,'Sí, borrar',()=>{
-   moverStock(p.items,+1);D.pedidos=D.pedidos.filter(x=>x.id!=id);D.movs=D.movs.filter(m=>m.pedidoId!=id);guardar();aviso('Pedido borrado')})},
+   moverStock(p.items,+1);if(p.fotos&&p.fotos.length&&sb)sb.storage.from('fotos').remove(p.fotos).catch(()=>{});D.pedidos=D.pedidos.filter(x=>x.id!=id);D.movs=D.movs.filter(m=>m.pedidoId!=id);guardar();aviso('Pedido borrado')})},
  pfCliSel:id=>{F.clienteId=id;F.nombre='';pfCli()},
  pfCliQuitar:()=>{F.clienteId='';pfCli();setTimeout(()=>$('#pf-nom')?.focus(),30)},
  pfAdd:id=>{const p=prod(id),ex=F.items.find(i=>i.pid==id);if(ex)ex.cant++;else F.items.push({pid:id,nombre:p.nombre,cant:1,precio:p.precio});pfItems()},
@@ -1661,6 +1726,10 @@ const A={
  nubeInfo:()=>nubeInfo(),
  olvide:()=>olvide(),
  recTodos:()=>{REC_TODOS=!REC_TODOS;pintar()},
+ fotoAdd:id=>fotoAdd(id),
+ fotoVer:(id,b)=>fotoVer(id,b.dataset.ruta),
+ fotoQuitar:(id,b)=>fotoQuitar(id,b.dataset.ruta),
+ respaldoBajar:id=>respaldoBajar(id),
  pgMet:(v,b)=>{PG.met=PG.met==v?'':v;$$('#pg-met .chip').forEach(x=>x.classList.toggle('on',x.dataset.id==PG.met))},
  pgMon:(v,b)=>{PG.bs=v=='bs';$$('[data-a=pgMon]').forEach(x=>x.classList.toggle('on',x==b));$('#pg-bs').hidden=!PG.bs;if(PG.bs){bsEco();const i=$('#sf [name=bs]');if(i&&!i.value)i.focus()}},
  etapa:(id,b)=>{const p=ped(id);if(!p||p.entregado)return;const e=b.dataset.e;if(!ETAPAS.some(x=>x[0]==e))return;

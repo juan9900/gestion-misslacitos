@@ -61,7 +61,7 @@ header{position:sticky;top:0;z-index:20;padding:calc(10px + env(safe-area-inset-
 .logo{flex:none;width:52px;height:52px;border-radius:50%;padding:3px;border:1.5px dashed rgba(251,243,234,.45)}
 .logo img{width:100%;height:100%;border-radius:50%;display:block}
 .cab h1{margin:0;font-size:26px;line-height:1.05;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.cab>div:last-child{min-width:0}
+.cab>div:nth-child(2){flex:1;min-width:0}
 .cab small{display:block;color:var(--muted);font-size:13px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;margin-top:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 header .puntada{max-width:640px;margin:0 auto}
 
@@ -301,6 +301,26 @@ nav button{position:relative}
 .cp .x{flex:none;width:42px;height:42px;border:0;border-radius:12px;background:transparent;color:var(--muted);display:flex;align-items:center;justify-content:center}
 .cp.h .chk{border-style:solid;border-color:var(--menta);background:var(--menta);color:var(--tinta)}
 .cp.h .txt{text-decoration:line-through;color:var(--muted);font-weight:600}
+
+/* ---------- comparar meses, sugerencias, cobros ---------- */
+.cmp .fila{padding:7px 0;border-bottom:1px dashed var(--line);align-items:center}
+.cmp .fila:last-child{border-bottom:0}
+.cmp .v{text-align:right;font-weight:800}
+.cmp .v small{display:block;color:var(--muted);font-weight:600;font-size:12.5px}
+.sube{color:var(--menta)}.baja{color:var(--coral)}
+.sug{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
+.sug:empty{display:none}
+.sug .chip{min-height:38px;padding:5px 12px;font-size:14px;border-color:var(--lila);color:var(--lila)}
+.parecido{display:flex;gap:10px;align-items:flex-start;background:color-mix(in srgb,var(--limon) 10%,var(--card));border:1px solid color-mix(in srgb,var(--limon) 35%,transparent);border-radius:16px;padding:12px 14px;margin-top:12px;color:var(--limon);font-size:15px}
+.parecido p{margin:0;color:var(--ink);font-weight:600}
+.un .opcion{min-height:54px}
+.un .opcion .ico{width:28px;height:28px;border-radius:8px}
+.cob{display:flex;align-items:center;gap:10px;background:var(--card);border:1px solid var(--line);border-radius:18px;padding:12px 14px;margin:8px 0}
+.cob .tx{flex:1;min-width:0}
+.cob .tx>b{display:block;overflow-wrap:anywhere}
+.cob .mini{flex:none}
+.cob.hecho{opacity:.55}
+.cob.hecho .mini{border-color:var(--menta);color:var(--menta)}
 
 /* ---------- nube ---------- */
 .nube{margin-left:auto;flex:none;display:inline-flex;align-items:center;gap:6px;min-height:40px;padding:6px 12px;border-radius:30px;border:1.5px solid var(--line2);background:var(--card);color:var(--t,var(--muted));font-weight:800;font-size:13px}
@@ -574,6 +594,27 @@ function globo(){const n=recordatorios().filter(r=>r.u<=2).length,b=$('#menu [da
  let g=b.querySelector('.globo');if(n){if(!g){g=document.createElement('span');g.className='globo';b.appendChild(g)}g.textContent=n>9?'9+':n}else if(g)g.remove();
  try{const r=n?navigator.setAppBadge&&navigator.setAppBadge(n):navigator.clearAppBadge&&navigator.clearAppBadge();if(r&&r.catch)r.catch(()=>{})}catch(e){}}
 const norm=s=>String(s??'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
+/* nombres de productos: "Denarios", "denarios " y "DENARIOS" son el mismo */
+const nomKey=s=>norm(s).replace(/[^a-z0-9 ]/g,' ').replace(/\s+/g,' ').trim();
+function lev(a,b){if(a==b)return 0;if(!a.length)return b.length;if(!b.length)return a.length;if(Math.abs(a.length-b.length)>3)return 9;
+ let v=[...Array(b.length+1).keys()];for(let i=1;i<=a.length;i++){const w=[i];for(let j=1;j<=b.length;j++)w[j]=Math.min(v[j]+1,w[j-1]+1,v[j-1]+(a[i-1]==b[j-1]?0:1));v=w}return v[b.length]}
+/* todos los nombres usados en pedidos, agrupados, con la forma de escribirlos más usada */
+function nombresUsados(){const g={};
+ const sumar=(n,c)=>{const k=nomKey(n);if(!k)return;g[k]=g[k]||{k,formas:{},veces:0};g[k].formas[n.trim()]=(g[k].formas[n.trim()]||0)+c;g[k].veces+=c};
+ D.pedidos.forEach(p=>p.items.forEach(i=>sumar(i.nombre,i.cant)));D.productos.forEach(p=>sumar(p.nombre,0));
+ return Object.values(g).map(x=>({k:x.k,veces:x.veces,nombre:Object.entries(x.formas).sort((a,b)=>b[1]-a[1])[0][0]})).sort((a,b)=>b.veces-a.veces)}
+/* grupos de nombres que parecen el mismo (por ejemplo "denarios" y "denasrios") */
+function parecidos(){const L=nombresUsados().filter(x=>x.veces>0),out=[],usado=new Set();
+ L.forEach(a=>{if(usado.has(a.k))return;const grupo=[a];
+  L.forEach(b=>{if(b.k!=a.k&&!usado.has(b.k)&&a.k.length>=4&&b.k.length>=4&&lev(a.k,b.k)<=Math.max(1,Math.floor(Math.min(a.k.length,b.k.length)/6)))grupo.push(b)});
+  if(grupo.length>1){grupo.forEach(x=>usado.add(x.k));out.push(grupo)}});
+ return out}
+/* agrupa piezas vendidas por nombre (sin importar mayúsculas, acentos ni espacios) */
+function agruparVendidos(P){const g={},formas={};
+ P.forEach(p=>p.items.forEach(i=>{const k=nomKey(i.nombre)||i.nombre;g[k]=g[k]||[i.nombre.trim(),0,0];g[k][1]+=i.cant;g[k][2]+=i.cant*i.precio;
+  formas[k]=formas[k]||{};formas[k][i.nombre.trim()]=(formas[k][i.nombre.trim()]||0)+i.cant}));
+ for(const k in g)g[k][0]=Object.entries(formas[k]).sort((a,b)=>b[1]-a[1])[0][0];
+ return Object.values(g).sort((a,b)=>b[1]-a[1])}
 
 /* ---------- RECORDATORIOS: salen solos de los pedidos y del inventario ---------- */
 let REC_TODOS=false;
@@ -602,6 +643,51 @@ function recHtml(){
    +(L.length>5?`<button class="btn plano" data-a="recTodos">${REC_TODOS?'Ver menos':'Ver los '+L.length+' recordatorios'}</button>`:'')
   :vacioHtml('check','Todo al día. No hay nada urgente.'))
   +(otros?`<button class="link" data-a="tab" data-id="pedidos" style="border-top:0;margin-top:4px;padding-top:6px">${plural(otros,'pedido más','pedidos más')} por entregar sin apuro ${ic('der')}</button>`:'')}
+/* ---------- UNIR NOMBRES REPETIDOS ---------- */
+let UN={sel:new Set()};
+function unirNombres(){
+ const L=nombresUsados().filter(x=>x.veces>0).sort((a,b)=>a.nombre.localeCompare(b.nombre));
+ if(L.length<2)return aviso('Todavía no hay nombres para unir');
+ UN={sel:new Set()};const par=parecidos();
+ hoja('Unir nombres repetidos',`<div class="nota">${ic('info')}<span>Toca los nombres que son <b>el mismo producto</b> y escribe cómo debe quedar. Se cambia en todos los pedidos, en todos los teléfonos.</span></div>
+  ${par.length?`<div class="f">${paso(0,'Parecen repetidos')}<div class="chips">${par.map((g,i)=>`<button type="button" class="chip" data-a="unSug" data-id="${i}">${g.map(x=>esc(x.nombre)).join(' + ')}</button>`).join('')}</div></div>`:''}
+  <div class="f">${paso(1,'¿Cuáles son el mismo?')}<div class="opciones un">${L.map(x=>`<button type="button" class="opcion" data-a="unSel" data-id="${esc(x.k)}"><span class="ico">${ic('check','s')}</span><div>${esc(x.nombre)}<span class="sm">${plural(x.veces,'pieza vendida','piezas vendidas')}</span></div></button>`).join('')}</div></div>
+  <label class="f">${paso(2,'¿Cómo debe quedar el nombre?')}<input class="in" name="final" id="un-final" maxlength="80" placeholder="Toca primero los nombres"></label>
+  <div class="nota" id="un-cuenta" style="margin-top:12px">${ic('bolsa')}<span>Elige al menos dos nombres.</span></div>`,
+ {ok:'Unir nombres',c:'c-limon',onOk:fd=>{
+  const fin=String(fd.get('final')||'').trim();
+  if(UN.sel.size<2)return error('Toca al menos dos nombres.');
+  if(!fin)return error('Escribe cómo debe quedar el nombre.');
+  try{localStorage.setItem(KEY+'_antes_de_unir',JSON.stringify(D))}catch(e){}
+  let n=0;D.pedidos.forEach(p=>{let cambia=false;p.items.forEach(i=>{if(UN.sel.has(nomKey(i.nombre))&&i.nombre!==fin){i.nombre=fin;cambia=true}});if(cambia)n++});
+  guardar();aviso(n?'Listo: se cambió en '+plural(n,'pedido','pedidos'):'No había nada que cambiar')}});
+ /* guardar el estado de la hoja para unSug */
+ UN.par=par;
+}
+function unActualizar(){
+ const L=nombresUsados().filter(x=>UN.sel.has(x.k));
+ $$('[data-a=unSel]').forEach(b=>b.classList.toggle('on',UN.sel.has(b.dataset.id)));
+ const f=$('#un-final');if(f&&L.length&&!f.dataset.tocado)f.value=L.sort((a,b)=>b.veces-a.veces)[0].nombre;
+ const n=D.pedidos.filter(p=>p.items.some(i=>UN.sel.has(nomKey(i.nombre)))).length;
+ const c=$('#un-cuenta');if(c)c.innerHTML=ic('bolsa')+'<span>'+(UN.sel.size<2?'Elige al menos dos nombres.':'Se cambiará en <b>'+plural(n,'pedido','pedidos')+'</b>.')+'</span>';
+}
+document.addEventListener('input',e=>{if(e.target.id=='un-final')e.target.dataset.tocado='1'});
+
+/* ---------- COBRAR A VARIAS POR WHATSAPP ---------- */
+function cobrarVarias(){
+ const g={};D.pedidos.filter(p=>debe(p)>0).sort((a,b)=>a.fecha.localeCompare(b.fecha)).forEach(p=>{const k=p.clienteId||'_rapida';(g[k]=g[k]||[]).push(p)});
+ const grupos=Object.entries(g).map(([k,ps])=>({c:cli(k),ps,total:sum(ps,debe)})).sort((a,b)=>b.total-a.total);
+ if(!grupos.length)return aviso('¡Nadie te debe!');
+ const msg=x=>{const nom=x.c?x.c.nombre.split(' ')[0]:'';
+  return`¡Hola ${nom}! 🎀 Te escribe Miss Lacitoss.\nTe recuerdo que tienes pendiente *${fmt(x.total)}*:\n`+x.ps.map(p=>`• ${p.items.map(i=>i.cant+' '+i.nombre).join(', ')} (pedido del ${fe(p.fecha)}): ${fmt(debe(p))}`).join('\n')+`\n¡Gracias! 💖`};
+ hoja('Cobrar por WhatsApp',`<div class="nota">${ic('info')}<span>Toca <b>WhatsApp</b> en cada una. Se abre el chat con el mensaje listo; solo tienes que enviarlo.</span></div>
+  ${grupos.map(x=>`<div class="cob"><div class="tx"><b>${esc(x.c?x.c.nombre:'Venta rápida')}</b><span class="sm">Debe <b class="k-coral">${fmt(x.total)}</b> · ${plural(x.ps.length,'pedido','pedidos')}</span></div>
+   ${x.c&&telWa(x.c.tel)?`<a class="mini cobwa" style="color:#5fdc8f" href="https://wa.me/${telWa(x.c.tel)}?text=${encodeURIComponent(msg(x))}" target="_blank" rel="noopener">${ic('wa','s')}WhatsApp</a>`
+    :x.c?`<button type="button" class="mini" data-a="editClienta" data-id="${x.c.id}">Poner teléfono</button>`:'<span class="sm">Sin clienta</span>'}</div>`).join('')}
+  <p class="sm" style="margin:14px 2px 0">Total por cobrar: <b style="color:var(--ink)">${fmt(deudaTotal())}</b></p>`,{sinBoton:true});
+}
+document.addEventListener('click',e=>{const a=e.target.closest('a.cobwa');if(a)a.closest('.cob').classList.add('hecho')});
+
 /* ---------- LISTA DE COMPRAS ---------- */
 function comprasHtml(){
  const pend=D.compras.filter(c=>!c.hecho),hechas=D.compras.filter(c=>c.hecho);
@@ -623,6 +709,17 @@ function corte(k){
  const I=t('ing'),E=t('egr'),V=t('inv');
  return{M,P,I,E,V,G:I-E-V,ventas:sum(P,p=>p.total),uds:sum(P,unidades),debenMes:sum(P,debe)}}
 const deudaTotal=()=>sum(D.pedidos,debe);
+/* el mes anterior; si es el mes en curso, solo los mismos días (del 1 a hoy) para que sea justo */
+function mesAnterior(k){const[a,m]=k.split('-').map(Number),pd=new Date(a,m-2,1),pk=pd.getFullYear()+'-'+pad(pd.getMonth()+1);
+ const lim=k==mesDe(hoy())?new Date().getDate():0,dentro=f=>mesDe(f)==pk&&(!lim||+String(f).slice(8,10)<=lim);
+ const M=D.movs.filter(x=>dentro(x.fecha)),P=D.pedidos.filter(x=>dentro(x.fecha)),t=tp=>sum(M.filter(x=>x.tipo==tp),x=>x.monto);
+ const I=t('ing');return{I,G:I-t('egr')-t('inv'),P:P.length,hay:M.length+P.length>0,nombre:MESES[pd.getMonth()],lim}}
+function cambioHtml(ahora,antes,dinero){const v=dinero?fmt:(x=>String(x));
+ const d=ahora-antes,cls=d>0?'sube':d<0?'baja':'',fl=d>0?'▲ ':d<0?'▼ ':'';
+ /* con cero o negativos un porcentaje no tiene sentido: se muestra la diferencia */
+ if(antes<=0||ahora<0)return`<span class="v ${cls}">${d?fl+(d>0?'+':'−')+v(Math.abs(d)):'igual'}<small>${v(ahora)} · antes ${v(antes)}</small></span>`;
+ const p=Math.round(d/antes*100);
+ return`<span class="v ${p>0?'sube':p<0?'baja':''}">${p>0?'▲ +':p<0?'▼ ':''}${p}%<small>${v(ahora)} · antes ${v(antes)}</small></span>`}
 
 /* ---------- INICIO ---------- */
 function pInicio(){
@@ -653,7 +750,8 @@ function pInicio(){
   </div>
   <button class="link" data-a="tab" data-id="dinero">Ver el corte del mes ${ic('der')}</button>
  </div>
- ${deudoras.length?`<button class="link" data-a="verDeben" style="border-top:0;margin-top:0;color:var(--coral)">Me deben en total ${fmt(deudaTotal())} ${ic('der')}</button>`:''}
+ ${deudoras.length?`<button class="link" data-a="verDeben" style="border-top:0;margin-top:0;color:var(--coral)">Me deben en total ${fmt(deudaTotal())} ${ic('der')}</button>
+  <button class="btn plano" data-a="cobrarVarias" style="color:#5fdc8f;margin-top:4px">${ic('wa')}Cobrar a todas por WhatsApp</button>`:''}
  ${enNube()?`${titulo('Mis datos')}<div class="card" id="nube-card">${nubeCard()}</div>`:''}
  ${titulo('Copia de seguridad')}
  <div class="card"><p class="sm" style="margin:0;line-height:1.5">${enNube()?'Tus datos ya se guardan solos en la nube. Si quieres, también puedes guardar una copia en un archivo.':'Todo se guarda en este teléfono.'} ${enNube()?'':' Guarda una copia cada semana y envíatela por WhatsApp o correo, por si se pierde o se daña el teléfono.'}${D.copiaAt?`<br>Última copia: <b style="color:var(--ink)">${fe(D.copiaAt)}</b>`:''}</p>
@@ -685,6 +783,7 @@ function pPedidos(){
  <button class="btn caramelo c-rosa" data-a="nuevoPedido">${ic('mas')}Anotar pedido o venta</button>
  <div class="buscar">${ic('lupa')}<input id="bp" type="search" placeholder="Buscar por clienta o producto" value="${esc(BUSCA_P)}"></div>
  <div class="scroll">${ch('pend','Por entregar')}${ch('deben','Me deben')}${ch('ok','Entregados')}${ch('todos','Todos')}</div>
+ ${FILTRO=='deben'&&grupos.deben.length?`<button class="btn plano" data-a="cobrarVarias" style="color:#5fdc8f">${ic('wa')}Cobrar a todas por WhatsApp</button>`:''}
  <div id="lp">${lista.map(cardPedido).join('')||vacioHtml(q?'lupa':'lazo',q?'No encontré nada con «'+esc(BUSCA_P)+'»':FILTRO=='pend'?'No tienes pedidos pendientes':FILTRO=='deben'?'¡Nadie te debe!':'Aquí aparecerán tus pedidos')}</div>`;
  conBusqueda('#bp',v=>BUSCA_P=v);
 }
@@ -762,12 +861,17 @@ function pfProds(){
   +(ps.length?'':D.cats.filter(c=>c!='Otros').map(c=>`<button type="button" class="chip" data-a="pfAddCat" data-id="${esc(c)}">${ic('mas','s')}${esc(c)}</button>`).join(''))
   +`<button type="button" class="chip add" data-a="pfAddOtro">${ic('lapiz','s')}Otro producto</button>`;
 }
+/* hasta 4 nombres ya usados que coinciden con lo escrito (o se le parecen: errores de tipeo) */
+function sugerencias(txt){const k=nomKey(txt);if(!k)return[];const L=nombresUsados();
+ if(L.some(x=>x.k==k))return[];
+ return L.filter(x=>x.k.includes(k)||(k.length>=4&&lev(k,x.k.slice(0,Math.max(k.length,x.k.length)))<=2)).slice(0,4)}
+const sugHtml=(txt,n)=>sugerencias(txt).map(x=>`<button type="button" class="chip" data-a="pfSug" data-id="${n}" data-nom="${esc(x.nombre)}">${esc(x.nombre)}</button>`).join('');
 function pfItems(){
  const el=$('#pf-items');if(!el)return;
  el.innerHTML=F.items.map((i,n)=>{const pr=i.pid&&prod(i.pid);
   const hint=pr?(pr.encargo?'Por encargo':'Te quedan '+(stockDe(pr)+(F.viejo?sum(F.viejo.items.filter(x=>x.pid==i.pid),x=>x.cant):0))):'';
   return`<div class="item"><div class="fila" style="align-items:center">${i.pid?`<div style="min-width:0"><b class="d" style="font-size:18px">${esc(i.nombre)}</b><div class="sm" style="font-size:13px">${hint}</div></div>`
-   :`<input class="in" style="margin:0;min-height:48px" placeholder="¿Qué producto?" maxlength="80" value="${esc(i.nombre)}" data-it="${n}" data-k="nombre">`}
+   :`<div style="flex:1;min-width:0"><input class="in" style="margin:0;min-height:48px" placeholder="¿Qué producto?" maxlength="80" value="${esc(i.nombre)}" data-it="${n}" data-k="nombre" autocomplete="off"><div class="sug" id="sug-${n}">${sugHtml(i.nombre,n)}</div></div>`}
    <button type="button" class="quitar" data-a="pfQuitar" data-id="${n}" aria-label="Quitar">${ic('cerrar','s')}</button></div>
    <div class="row2"><div class="step"><button type="button" class="redondo" data-a="pfMenos" data-id="${n}" aria-label="Uno menos">${ic('menos')}</button><b class="d">${i.cant}</b><button type="button" class="redondo mas" data-a="pfMas" data-id="${n}" aria-label="Uno más">${ic('mas')}</button></div>
    <div class="din"><b>$</b><input inputmode="decimal" placeholder="0,00" value="${centInput(i.precio)}" data-it="${n}" data-k="precio"></div></div>
@@ -775,7 +879,7 @@ function pfItems(){
  $$('[data-it]',el).forEach(inp=>inp.addEventListener('input',()=>{const it=F.items[+inp.dataset.it];
   if(inp.dataset.k=='precio'){it.precio=aCent(inp.value);const box=inp.closest('.item');box.querySelector('.pie b').textContent=fmt(it.precio*it.cant);
    box.querySelector('.eco').textContent=inp.value.trim()?'= '+fmt(it.precio)+' c/u':''}
-  else it.nombre=inp.value;pfTotal()}));
+  else{it.nombre=inp.value;F.avisado=false;const sg=$('#sug-'+inp.dataset.it);if(sg)sg.innerHTML=sugHtml(inp.value,+inp.dataset.it)}pfTotal()}));
  pfTotal();
 }
 const pfTotal=()=>{const t=$('#pf-total');if(t)t.textContent=fmt(sum(F.items,i=>i.precio*i.cant))};
@@ -785,6 +889,10 @@ function guardarPedido(fd){
  if(!F.items.length)return error('Toca al menos un producto en el paso 2.');
  if(F.items.some(i=>!i.nombre))return error('Escribe el nombre del producto que falta.');
  if(F.items.some(i=>!i.precio))return error('Ponle precio a todos los productos.');
+ /* aviso si un nombre escrito a mano se parece mucho a uno que ya usa (una sola vez: si vuelve a tocar Guardar, se deja así) */
+ if(!F.avisado){const L=nombresUsados();for(const i of F.items){if(i.pid)continue;const k=nomKey(i.nombre);if(L.some(x=>x.k==k))continue;
+  const cerca=L.find(x=>x.veces>0&&k.length>=4&&lev(k,x.k)<=2);
+  if(cerca){F.avisado=true;return error('¿Quisiste decir «'+cerca.nombre+'»? Toca la sugerencia debajo del producto, o vuelve a tocar Guardar para dejar «'+i.nombre+'».')}}}
  const caro=F.items.find(i=>i.precio>MAX_MONTO);
  if(caro)return error('El precio de «'+caro.nombre+'» es demasiado alto. Revísalo.');
  if(entrega&&!fechaOk(entrega))return error('Revisa la fecha de entrega.');
@@ -934,8 +1042,7 @@ function pDinero(){
  const pct=invTot?Math.max(0,Math.round(dejo/invTot*100)):0;
  const porCat=tp=>{const g={};c.M.filter(m=>m.tipo==tp).forEach(m=>{const k=m.cat||'Otro';g[k]=(g[k]||0)+m.monto});return Object.entries(g)};
  const salidas=[...porCat('egr').map(x=>['Gasto · '+x[0],x[1]]),...porCat('inv').map(x=>['Inversión · '+x[0],x[1]])].sort((a,b)=>b[1]-a[1]);
- const vend={};c.P.forEach(p=>p.items.forEach(i=>{const k=i.nombre.trim();vend[k]=vend[k]||[k,0,0];vend[k][1]+=i.cant;vend[k][2]+=i.cant*i.precio}));
- const top=Object.values(vend).sort((a,b)=>b[1]-a[1]).slice(0,5);
+ const top=agruparVendidos(c.P).slice(0,5),par=parecidos();
  const barras=(arr,fv,grad)=>{const mx=Math.max(1,...arr.map(x=>x[1]));return arr.map(x=>`<div class="fila"><b style="min-width:0;overflow-wrap:anywhere;font-weight:700">${esc(x[0])}</b><span class="sm" style="flex:none">${fv(x)}</span></div><div class="bar"><i style="width:${Math.max(4,x[1]/mx*100)}%${grad?';background:'+grad:''}"></i></div>`).join('')};
  const movs=c.M.slice().sort((a,b)=>(b.fecha+b.id).localeCompare(a.fecha+a.id));
  $('#pg-dinero').innerHTML=`
@@ -956,9 +1063,17 @@ function pDinero(){
   <div class="kpi"><small>${ic('reloj','s')}Me deben (mes)</small><b class="d ${c.debenMes?'k-coral':''}">${fmt(c.debenMes)}</b></div>
  </div>
  <p class="expl"><b>Me quedó</b> = lo que entró − lo que gasté − lo que invertí.</p>
+ ${(()=>{const a=mesAnterior(MES);if(!a.hay)return'';
+  return`${titulo('Comparado con '+a.nombre)}<div class="card cmp">${a.lim?`<p class="sm" style="margin:0 0 6px">Del 1 al ${a.lim} de cada mes, para que sea justo.</p>`:''}
+   <div class="fila"><span>Entró</span>${cambioHtml(c.I,a.I,true)}</div>
+   <div class="fila"><span>Me quedó</span>${cambioHtml(c.G,a.G,true)}</div>
+   <div class="fila"><span>Pedidos</span>${cambioHtml(c.P.length,a.P,false)}</div></div>`})()}
  <button class="btn caramelo wa" data-a="waCorte">${ic('wa')}Enviar el corte por WhatsApp</button>
  <button class="btn plano" data-a="repMes">${ic('pdf')}Reporte del mes en PDF</button>
- ${top.length?`${titulo('Lo que más vendí')}<div class="card">${barras(top,x=>plural(x[1],'pieza','piezas')+' · '+fmt(x[2]))}</div>`:''}
+ ${top.length?`${titulo('Lo que más vendí')}<div class="card">${barras(top,x=>plural(x[1],'pieza','piezas')+' · '+fmt(x[2]))}
+  ${par.length?`<div class="parecido">${ic('alerta')}<div style="flex:1"><p>Hay nombres que parecen el mismo producto: <b>${par.slice(0,3).map(g=>g.map(x=>esc(x.nombre)).join(' / ')).join('; ')}</b>. Únelos para que las cuentas salgan bien.</p>
+   <button class="btn caramelo c-limon" data-a="unirNombres" style="min-height:46px;margin:10px 0 0;font-size:15px">Unir nombres</button></div></div>`
+  :`<button class="link" data-a="unirNombres" style="color:var(--muted)">Unir nombres repetidos ${ic('der')}</button>`}</div>`:''}
  ${salidas.length?`${titulo('¿En qué se fue el dinero?')}<div class="card">${barras(salidas,x=>fmt(x[1]),'linear-gradient(90deg,var(--durazno),var(--coral))')}</div>`:''}
  ${titulo('Reportes en PDF')}
  <div class="reps">
@@ -1238,7 +1353,7 @@ const signoP=m=>(m.tipo=='ing'?'+':'-')+fmtP(m.monto);
 const prodsTxt=p=>p.items.map(i=>i.cant+' '+i.nombre).join(', ');
 const estadoTxt=p=>p.entregado?'Entregado':'Por entregar';
 const mesCap=k=>{const t=nombreMes(k);return t[0].toUpperCase()+t.slice(1)};
-function vendidos(P){const g={};P.forEach(p=>p.items.forEach(i=>{const k=i.nombre.trim();g[k]=g[k]||[k,0,0];g[k][1]+=i.cant;g[k][2]+=i.cant*i.precio}));return Object.values(g).sort((a,b)=>b[1]-a[1])}
+function vendidos(P){return agruparVendidos(P)}
 function porClienta(P){const g={};P.forEach(p=>{const k=p.clienteId||'_';g[k]=g[k]||[nomCli(p),0,0,0];g[k][1]++;g[k][2]+=p.total;g[k][3]+=debe(p)});return Object.values(g).sort((a,b)=>b[2]-a[2])}
 function tablaInventario(doc){pdfTabla(doc,['Producto','Tipo','Precio','Costo','Piezas'],D.productos.slice().sort((a,b)=>(a.cat||'').localeCompare(b.cat||'')||a.nombre.localeCompare(b.nombre))
  .map(p=>[p.nombre,p.cat||'',fmtP(p.precio),p.costo?fmtP(p.costo):'-',p.encargo?'Por encargo':String(Math.max(0,stockDe(p)))]),{cols:{2:DER,3:DER,4:DER}})}
@@ -1359,6 +1474,11 @@ const A={
  importar:()=>$('#archivo').click(),
  nubeInfo:()=>nubeInfo(),
  recTodos:()=>{REC_TODOS=!REC_TODOS;pintar()},
+ pfSug:(n,b)=>{const it=F.items[+n];if(!it)return;it.nombre=b.dataset.nom;F.avisado=false;pfItems()},
+ unirNombres:()=>unirNombres(),
+ unSel:k=>{UN.sel.has(k)?UN.sel.delete(k):UN.sel.add(k);unActualizar()},
+ unSug:i=>{(UN.par[+i]||[]).forEach(x=>UN.sel.add(x.k));unActualizar()},
+ cobrarVarias:()=>cobrarVarias(),
  compraAdd:()=>{const i=$('#cp-in'),t=i.value.trim();if(!t)return i.focus();
   D.compras.push({id:uid(),texto:t,hecho:false,fecha:hoy()});guardar();const n=$('#cp-in');if(n)n.focus()},
  compraOk:id=>{const c=D.compras.find(x=>x.id==id);if(!c)return;

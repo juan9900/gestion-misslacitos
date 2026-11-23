@@ -32,6 +32,11 @@ async function T(nombre,fn){try{await fn()}catch(e){ok(nombre+' (excepción)',fa
 (async()=>{
  /* Seguro: estas pruebas BORRAN el almacenamiento local. Solo corren en la computadora, nunca en el sitio real. */
  if(!['127.0.0.1','localhost'].includes(location.hostname)){log('Las pruebas solo se ejecutan en 127.0.0.1');return}
+ /* un service worker de otra copia podría servir archivos viejos: se quita y se recarga */
+ if('serviceWorker' in navigator){const rs=await navigator.serviceWorker.getRegistrations();for(const r of rs)await r.unregister();
+  for(const k of await caches.keys())await caches.delete(k);
+  if(navigator.serviceWorker.controller&&!sessionStorage.getItem('swLimpio')){sessionStorage.setItem('swLimpio','1');location.reload();return}}
+ sessionStorage.removeItem('swLimpio');
  Object.keys(localStorage).forEach(k=>localStorage.removeItem(k));
  await abrir();
 
@@ -245,6 +250,61 @@ async function T(nombre,fn){try{await fn()}catch(e){ok(nombre+' (excepción)',fa
   E("A.borrarPedido(D.pedidos.at(-1).id)");enviar();
   ok('17c borrar la venta devuelve la pieza',E('stockDe(D.productos[0])')==7);
   setSrv(s=>s.down=false);await telefono('A');await wait(600);
+ });
+
+ await T('18 comparar con el mes anterior',async()=>{
+  await telefono('A');await wait(600);
+  const k=E('mesDe(hoy())'),dia=+E('hoy()').slice(8,10),ant=E(`(()=>{const[a,m]='${k}'.split('-').map(Number);const d=new Date(a,m-2,1);return d.getFullYear()+'-'+pad(d.getMonth()+1)})()`);
+  E(`D.movs.push({id:'cmp1',tipo:'ing',concepto:'x',cat:'Venta',monto:10000,fecha:'${ant}-01',pedidoId:''});D.movs.push({id:'cmp2',tipo:'ing',concepto:'y',cat:'Venta',monto:99900,fecha:'${ant}-28',pedidoId:''});guardar()`);
+  const a=E(`mesAnterior('${k}')`);
+  ok('18a mes en curso: compara solo los mismos días',dia<28?a.I==10000:a.I==109900,a);
+  E("MES=mesDe(hoy());irA('dinero')");
+  ok('18b se muestra la comparación',/Comparado con/.test(q('#pg-dinero').textContent));
+  ok('18c sin datos el mes anterior no muestra porcentaje',E("cambioHtml(500,0,true)").indexOf('%')<0);
+  ok('18e si queda en negativo muestra la diferencia, no un porcentaje',E("cambioHtml(-1000,8000,true)").indexOf('%')<0&&/90,00/.test(E("cambioHtml(-1000,8000,true)")));
+  ok('18d porcentaje correcto',/\+50%/.test(E("cambioHtml(150,100,false)")));
+  E("D.movs=D.movs.filter(m=>!['cmp1','cmp2'].includes(m.id));guardar();irA('inicio')");
+ });
+
+ await T('19 nombres de productos',async()=>{
+  const id1=E('uid()'),id2=E('uid()');
+  E(`D.pedidos.push({id:'${id1}',clienteId:'',items:[{pid:'',nombre:'Denarios',cant:3,precio:100}],total:300,pagoPrevio:300,detalle:'',entrega:'',entregado:true,fecha:hoy()},{id:'${id2}',clienteId:'',items:[{pid:'',nombre:'denasrios',cant:2,precio:100}],total:200,pagoPrevio:200,detalle:'',entrega:'',entregado:true,fecha:hoy()});guardar()`);
+  ok('19a detecta denarios / denasrios como parecidos',E("parecidos().some(g=>g.some(x=>x.k=='denarios')&&g.some(x=>x.k=='denasrios'))"),E("JSON.stringify(parecidos())"));
+  ok('19b mayúsculas y acentos se agrupan',E("agruparVendidos([{items:[{nombre:'Toallas Bordadas',cant:1,precio:1},{nombre:'toallas bordadas ',cant:2,precio:1}]}]).length")==1);
+  E('A.nuevoPedido()');clic('[data-a=pfAddOtro]');pon('#pf-items [data-k=nombre]','denar');
+  ok('19c al escribir sugiere nombres ya usados',[...d.querySelectorAll('#sug-0 .chip')].some(c=>/denarios/i.test(c.textContent)),q('#sug-0')&&q('#sug-0').innerHTML);
+  clic('#sug-0 .chip');
+  ok('19d tocar la sugerencia pone el nombre',E('F.items[0].nombre')=='Denarios');
+  pon('#pf-items [data-k=nombre]','denariso');pon('#pf-items [data-k=precio]','1');enviar();
+  ok('19e avisa de posible error de tipeo',hojaAbierta()&&/Quisiste decir/.test(errTxt()),errTxt());
+  enviar();
+  ok('19f si vuelve a guardar, lo deja como lo escribió',!hojaAbierta()&&E('D.pedidos.at(-1).items[0].nombre')=='denariso',errTxt());
+  E('A.borrarPedido(D.pedidos.at(-1).id)');enviar();
+  E('A.unirNombres()');
+  ok('19g la hoja de unir propone el grupo parecido',!!q('[data-a=unSug]'));
+  clic('[data-a=unSug]');
+  ok('19h preselecciona y propone el nombre más usado',q('#un-final').value=='Denarios'&&/2 pedidos/.test(q('#un-cuenta').textContent),{fin:q('#un-final').value,c:q('#un-cuenta').textContent});
+  enviar();
+  ok('19i une los nombres en los pedidos',E(`ped('${id2}').items[0].nombre`)=='Denarios'&&!E('parecidos().length'),E(`ped('${id2}').items[0].nombre`));
+  ok('19j guarda copia antes de unir',!!localStorage.getItem('negocio_antes_de_unir'));
+  E('A.unirNombres()');enviar();ok('19k pide al menos dos nombres',/al menos dos/.test(errTxt()));E('cerrar()');
+  E(`A.borrarPedido('${id1}')`);enviar();E(`A.borrarPedido('${id2}')`);enviar();
+ });
+
+ await T('20 cobrar a varias por WhatsApp',async()=>{
+  const c1=E('D.clientas.find(c=>c.tel).id');
+  E(`D.pedidos.push({id:'cv1',clienteId:'${c1}',items:[{pid:'',nombre:'Lazo',cant:1,precio:500}],total:500,pagoPrevio:0,detalle:'',entrega:'',entregado:true,fecha:hoy()},{id:'cv2',clienteId:'${c1}',items:[{pid:'',nombre:'Collar',cant:1,precio:300}],total:300,pagoPrevio:100,detalle:'',entrega:'',entregado:true,fecha:hoy()},{id:'cv3',clienteId:'',items:[{pid:'',nombre:'Pulsera',cant:1,precio:200}],total:200,pagoPrevio:0,detalle:'',entrega:'',entregado:true,fecha:hoy()});guardar()`);
+  E('A.cobrarVarias()');
+  const a=q('.cob a.cobwa');
+  ok('20a una fila por clienta con su total',d.querySelectorAll('.cob').length>=2&&/\$7,00/.test(q('#sheet-b').textContent),q('#sheet-b').textContent.slice(0,300));
+  const m=decodeURIComponent(a.href.split('text=')[1]||'');
+  ok('20b el mensaje lista cada pedido y el total',/7,00/.test(m)&&/Lazo/.test(m)&&/Collar/.test(m),m);
+  ok('20c enlace al número correcto',/wa\.me\/58\d{10}\?/.test(a.href),a.href);
+  a.addEventListener('click',e=>e.preventDefault());a.dispatchEvent(new w.MouseEvent('click',{bubbles:true}));
+  ok('20d al tocarlo queda marcado como enviado',a.closest('.cob').classList.contains('hecho'));
+  ok('20e venta sin clienta no tiene botón de WhatsApp',[...d.querySelectorAll('.cob')].some(x=>/Venta rápida/.test(x.textContent)&&!x.querySelector('a')));
+  E('cerrar()');E("FILTRO='deben';irA('pedidos')");ok('20f botón en Pedidos > Me deben',!!q('#pg-pedidos [data-a=cobrarVarias]'));
+  E("D.pedidos=D.pedidos.filter(p=>!['cv1','cv2','cv3'].includes(p.id));guardar();FILTRO='pend';irA('inicio')");
  });
 
  await T('15 reportes PDF',async()=>{

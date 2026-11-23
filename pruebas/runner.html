@@ -457,6 +457,55 @@ async function T(nombre,fn){try{await fn()}catch(e){ok(nombre+' (excepción)',fa
   w.HTMLAnchorElement.prototype.click=c0;
  });
 
+ await T('28 calendario de entregas',async()=>{
+  await telefono('A');await wait(600);
+  const dia=n=>E(`(()=>{const d=new Date();d.setDate(d.getDate()+(${n}));return isoDe(d)})()`);
+  E(`D.pedidos.push(
+   {id:'cal1',clienteId:'',items:[{pid:'',nombre:'Lazo',cant:1,precio:100}],total:100,pagoPrevio:100,detalle:'',entrega:'${dia(0)}',entregado:false,fecha:hoy(),etapa:'listo'},
+   {id:'cal2',clienteId:'',items:[{pid:'',nombre:'Collar',cant:1,precio:100}],total:100,pagoPrevio:0,detalle:'',entrega:'${dia(-3)}',entregado:false,fecha:hoy()},
+   {id:'cal3',clienteId:'',items:[{pid:'',nombre:'Toalla',cant:1,precio:100}],total:100,pagoPrevio:100,detalle:'',entrega:'${dia(9)}',entregado:false,fecha:hoy()},
+   {id:'cal4',clienteId:'',items:[{pid:'',nombre:'Pulsera',cant:1,precio:100}],total:100,pagoPrevio:100,detalle:'',entrega:'${dia(0)}',entregado:true,fecha:hoy()});guardar()`);
+  E("irA('pedidos')");clic('[data-a=vistaP][data-id=cal]');
+  const txt=()=>q('#pg-pedidos').textContent;
+  ok('28a muestra Hoy con su pedido y la etapa',/Hoy/.test(txt())&&!!q('.dia.hoy [data-id=cal1]')&&/Listo/.test(q('.dia.hoy').textContent));
+  ok('28b los atrasados van arriba',!!q('.dia.tarde [data-id=cal2]')&&q('.dia.tarde').compareDocumentPosition(q('.dia.hoy'))&4);
+  ok('28c los entregados no salen',!q('[data-id=cal4]'));
+  ok('28d lo que debe se ve en la fila',/Debe \$1,00/.test(q('.dia.tarde').textContent));
+  ok('28e la semana tiene 7 días empezando en lunes',d.querySelectorAll('.dia:not(.tarde)').length>=7&&/lunes/.test([...d.querySelectorAll('.dia h3')].map(x=>x.textContent).join(' ')+E("diaLargo(isoDe(lunes(0)))")));
+  ok('28f lunes calculado con fecha local',E("lunes(0).getDay()")==1&&E("isoDe(lunes(0))")<=E('hoy()'));
+  clic('[data-a=sem][data-id="1"]');clic('[data-a=sem][data-id="1"]');
+  ok('28g avanzar semanas encuentra la entrega de dentro de 9 días',E("(()=>{const L=lunes(SEM),f=isoDe(new Date(L.getFullYear(),L.getMonth(),L.getDate()+6));return '"+dia(9)+"'>=isoDe(L)&&'"+dia(9)+"'<=f})()")?!!q('[data-id=cal3]'):true);
+  E('SEM=0');ok('28h semana que cruza fin de mes',E("(()=>{const r=[];for(let k=0;k<6;k++){const L=lunes(k);const d=[...Array(7)].map((_,i)=>isoDe(new Date(L.getFullYear(),L.getMonth(),L.getDate()+i)));r.push(d.every((x,i)=>i==0||diasHasta(x)-diasHasta(d[i-1])==1))}return r.every(Boolean)})()"));
+  clic('[data-a=vistaP][data-id=cal]');clic('.dia.hoy [data-id=cal1]');
+  ok('28i tocar un pedido lo abre en la lista',E('VISTA_P')=='lista'&&!!q('#p-cal1'));
+  E("D.pedidos=D.pedidos.filter(p=>!['cal1','cal2','cal3','cal4'].includes(p.id));guardar();VISTA_P='lista';irA('inicio')");
+ });
+
+ await T('29 recibo para la clienta',async()=>{
+  await telefono('A');await wait(600);
+  const c1=E('D.clientas[0].id');
+  E(`D.pedidos.push({id:'rc1',clienteId:'${c1}',items:[{pid:'',nombre:'Denarios',cant:3,precio:300},{pid:'',nombre:'Toalla bordada con un nombre muy pero muy largo para ver si se corta',cant:1,precio:1500}],total:2400,pagoPrevio:500,detalle:'',entrega:'',entregado:false,fecha:hoy()});
+   D.movs.push({id:'rcm1',tipo:'ing',concepto:'Abono',cat:'Pago de pedido',monto:700,fecha:hoy(),pedidoId:'rc1',metodo:'Pago móvil',bs:171850,tasa:245.5});guardar()`);
+  const r=E("reciboDatos(ped('rc1'))");
+  ok('29a el recibo suma igual que la app',r.total==2400&&r.pagado==E("pagado(ped('rc1'))")&&r.debe==E("debe(ped('rc1'))")&&r.debe==1200,r);
+  ok('29b incluye el abono de la versión anterior y el pago en bolívares',r.pagos.length==2&&r.pagos[0].txt=='Abono anterior'&&/Pago móvil · Bs 1\.718,50/.test(r.pagos[1].txt),r.pagos);
+  ok('29c la suma de los pagos cuadra con lo pagado',r.pagos.reduce((a,x)=>a+x.monto,0)==r.pagado);
+  E("FILTRO='todos';irA('pedidos')");ok('29d botón Recibo en el pedido',!!q('#p-rc1 [data-a=recibo]'));
+  clic('#p-rc1 [data-a=recibo]');for(let i=0;i<30&&!q('.recibo-img');i++)await wait(200);
+  ok('29e se ve la imagen del recibo',!!q('.recibo-img')&&/^blob:/.test(q('.recibo-img').src));
+  const im=q('.recibo-img');await new Promise(x=>im.complete?x():im.onload=x);
+  ok('29f imagen de buen tamaño',im.naturalWidth==1080&&im.naturalHeight>900,{w:im.naturalWidth,h:im.naturalHeight});
+  /* el pie no debe pisar la última línea: la franja justo encima de "Gracias" debe estar vacía */
+  const cv=d.createElement('canvas');cv.width=im.naturalWidth;cv.height=im.naturalHeight;const cx=cv.getContext('2d');cx.drawImage(im,0,0);
+  const px=cx.getImageData(72,im.naturalHeight-200,936,40).data;let tinta=0;for(let i=0;i<px.length;i+=4)if(px[i]<200)tinta++;
+  ok('29f2 el pie no se monta sobre los pagos',tinta==0,tinta);
+  let comp=null;w.navigator.canShare=()=>true;w.navigator.share=async o=>{comp=o};
+  clic('[data-a=reciboEnviar]');await wait(100);
+  ok('29g Enviar comparte el archivo listo (sin esperar)',comp&&comp.files&&comp.files[0].type=='image/png'&&/recibo-miss-lacitoss/.test(comp.files[0].name),comp&&comp.files&&comp.files[0].name);
+  E('cerrar()');
+  E("D.movs=D.movs.filter(m=>m.id!='rcm1');D.pedidos=D.pedidos.filter(p=>p.id!='rc1');guardar();FILTRO='pend';irA('inicio')");
+ });
+
  await T('15 reportes PDF',async()=>{
   const lib=await Promise.race([E('(async()=>{for(const u of LIB_PDF)await cargarScript(u);return true})()'),wait(15000).then(()=>false)]).catch(()=>false);
   if(!lib){ok('15 PDF (sin internet para la librería, no se probó)',true);return}

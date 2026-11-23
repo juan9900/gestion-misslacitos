@@ -354,6 +354,23 @@ nav button{position:relative}
 .respaldo:last-child{border-bottom:0}
 .respaldo span{flex:1;min-width:0}
 
+/* ---------- calendario de entregas ---------- */
+.dia{margin:18px 0 6px}
+.dia h3{display:flex;align-items:baseline;gap:8px;margin:0 2px 6px;font-size:19px}
+.dia h3 small{font-family:var(--fb);font-size:13px;font-weight:700;color:var(--muted)}
+.dia.hoy h3{color:var(--rosa)}
+.dia.tarde h3{color:var(--coral)}
+.dia .libre{color:var(--muted);font-size:14px;font-weight:600;padding:4px 2px;border-bottom:1px dashed var(--line)}
+.ent-row{display:flex;align-items:center;gap:10px;width:100%;text-align:left;color:inherit;font:inherit;background:var(--card);border:1px solid var(--line);border-radius:16px;padding:10px 12px;margin:6px 0}
+.ent-row:active{background:var(--card2)}
+.ent-row .tx{flex:1;min-width:0}
+.ent-row .tx b{display:block;overflow-wrap:anywhere}
+.ent-row .tx .sm{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ent-row .tag{font-size:12px}
+
+/* ---------- recibo ---------- */
+.recibo-img{display:block;width:100%;border-radius:14px;margin-top:8px;box-shadow:0 10px 30px rgba(0,0,0,.45)}
+
 /* ---------- nube ---------- */
 .nube{margin-left:auto;flex:none;display:inline-flex;align-items:center;gap:6px;min-height:40px;padding:6px 12px;border-radius:30px;border:1.5px solid var(--line2);background:var(--card);color:var(--t,var(--muted));font-weight:800;font-size:13px}
 .nube .i{width:20px;height:20px}
@@ -792,6 +809,66 @@ async function respaldoBajar(id){aviso('Preparando la copia…');
   descargar(new Blob([JSON.stringify(n)],{type:'application/json'}),nombre)}
  catch(e){aviso('No se pudo descargar la copia. Revisa el internet.',true)}}
 
+/* ---------- RECIBO PARA LA CLIENTA (imagen para WhatsApp) ---------- */
+function reciboDatos(p){
+ const pagos=D.movs.filter(m=>m.pedidoId==p.id&&m.tipo=='ing').sort((a,b)=>(a.fecha+a.id).localeCompare(b.fecha+b.id))
+  .map(m=>({fecha:m.fecha,txt:[m.metodo,m.bs?fmtBs(m.bs)+' a '+tasaTxt(m.tasa):''].filter(Boolean).join(' · ')||'Pago',monto:m.monto}));
+ /* abonos anotados en la versión anterior de la app no tienen registro propio */
+ if(p.pagoPrevio)pagos.unshift({fecha:p.fecha,txt:'Abono anterior',monto:p.pagoPrevio});
+ return{cliente:nomCli(p),fecha:p.fecha,num:'N.º '+String(p.id).slice(-6).toUpperCase(),
+  items:p.items.map(i=>({t:i.nombre,cant:i.cant,precio:i.precio,sub:i.cant*i.precio})),total:p.total,pagos,pagado:pagado(p),debe:debe(p),entregado:!!p.entregado}}
+async function reciboImagen(r){
+ try{await Promise.race([Promise.all(['700 60px Fraunces','600 34px Figtree','800 34px Figtree'].map(f=>document.fonts.load(f))),new Promise(x=>setTimeout(x,3000))])}catch(e){}
+ const W=1080,P=72,F='Figtree, system-ui, sans-serif',FD='Fraunces, Georgia, serif',ink='#1b1419',gris='#7b7080',rosa='#e05597';
+ /* alto exacto: cabecera y datos (732) + productos + pagos + pie (160) */
+ const alto=732+r.items.length*64+(r.pagos.length?60+r.pagos.length*56:0)+160;
+ const c=document.createElement('canvas');c.width=W;c.height=alto;const g=c.getContext('2d');
+ g.fillStyle='#fffaf6';g.fillRect(0,0,W,alto);
+ g.fillStyle='#131015';g.fillRect(0,0,W,250);
+ const logo=$('.logo img');
+ try{g.save();g.beginPath();g.arc(P+80,125,80,0,Math.PI*2);g.clip();g.drawImage(logo,P,45,160,160);g.restore()}catch(e){}
+ g.fillStyle='#fbf3ea';g.font=`700 60px ${FD}`;g.fillText('Miss Lacitoss',P+200,118);
+ g.fillStyle='#ff8fc4';g.font=`600 34px ${F}`;g.fillText('Recibo',P+202,172);
+ g.fillStyle='#a99fad';g.font=`600 28px ${F}`;g.textAlign='right';g.fillText(r.num,W-P,172);g.textAlign='left';
+ const cs=['#ff8fc4','#ffb47e','#ffe27d','#88e3a7','#80d4ea','#bba5ff'];for(let x=0,i=0;x<W;x+=30,i++){g.fillStyle=cs[i%6];g.fillRect(x,250,20,8)}
+ let y=330;
+ const corta=(t,max)=>{t=String(t);if(g.measureText(t).width<=max)return t;while(t.length>1&&g.measureText(t+'…').width>max)t=t.slice(0,-1);return t+'…'};
+ g.fillStyle=gris;g.font=`600 28px ${F}`;g.fillText('Para',P,y);g.fillText('Fecha del pedido',W/2+40,y);
+ y+=46;g.fillStyle=ink;g.font=`800 36px ${F}`;g.fillText(corta(r.cliente,W/2-P-20),P,y);g.fillText(fe(r.fecha),W/2+40,y);
+ y+=70;g.strokeStyle='#e6d9e0';g.lineWidth=2;g.setLineDash([10,8]);g.beginPath();g.moveTo(P,y);g.lineTo(W-P,y);g.stroke();g.setLineDash([]);
+ y+=60;
+ for(const it of r.items){g.font=`600 32px ${F}`;g.fillStyle=ink;g.fillText(corta(it.cant+' × '+it.t,W-2*P-230),P,y);
+  g.textAlign='right';g.fillText(fmt(it.sub),W-P,y);g.textAlign='left';y+=64}
+ y+=4;g.strokeStyle='#e6d9e0';g.setLineDash([10,8]);g.beginPath();g.moveTo(P,y-30);g.lineTo(W-P,y-30);g.stroke();g.setLineDash([]);
+ const fila=(a,b,col,f)=>{g.font=f||`600 32px ${F}`;g.fillStyle=col||ink;g.fillText(a,P,y);g.textAlign='right';g.fillText(b,W-P,y);g.textAlign='left';y+=56};
+ fila('Total',fmt(r.total),ink,`800 36px ${F}`);fila('Pagado',fmt(r.pagado),'#1f8f55');
+ y+=14;g.fillStyle=r.debe>0?'#fde9ea':'#e3f6ea';g.beginPath();g.roundRect?g.roundRect(P,y-52,W-2*P,84,20):g.rect(P,y-52,W-2*P,84);g.fill();
+ g.font=`700 40px ${FD}`;g.fillStyle=r.debe>0?'#d6394a':'#1f8f55';g.fillText(r.debe>0?'Queda por pagar':'Pagado completo',P+28,y+4);
+ if(r.debe>0){g.textAlign='right';g.fillText(fmt(r.debe),W-P-28,y+4);g.textAlign='left'}
+ y+=96;
+ if(r.pagos.length){g.fillStyle=gris;g.font=`700 28px ${F}`;g.fillText('PAGOS',P,y);y+=50;
+  for(const x of r.pagos){g.font=`600 28px ${F}`;g.fillStyle=ink;g.fillText(corta(fe(x.fecha)+'   '+x.txt,W-2*P-200),P,y);g.textAlign='right';g.fillText(fmt(x.monto),W-P,y);g.textAlign='left';y+=56}
+  y+=10}
+ g.fillStyle=rosa;g.font=`700 38px ${FD}`;g.textAlign='center';g.fillText('¡Gracias por tu compra!',W/2,alto-110);
+ g.fillStyle=gris;g.font=`600 26px ${F}`;g.fillText('Miss Lacitoss · Accesorios para niñas',W/2,alto-62);g.textAlign='left';
+ return await new Promise((ok,mal)=>c.toBlob(b=>b?ok(b):mal(new Error('sin imagen')),'image/png'))}
+let RECIBO=null;
+async function recibo(id){const p=ped(id);if(!p)return;aviso('Preparando el recibo…');
+ let blob;try{blob=await reciboImagen(reciboDatos(p))}catch(e){return aviso('No se pudo crear el recibo.',true)}
+ const nombre='recibo-miss-lacitoss-'+nomCli(p).replace(/[^\wÀ-ÿ]+/g,'-').toLowerCase()+'.png';
+ if(RECIBO&&RECIBO.url)URL.revokeObjectURL(RECIBO.url);
+ /* el archivo queda listo antes de mostrar los botones: así compartir no se pierde en el iPhone */
+ RECIBO={blob,nombre,url:URL.createObjectURL(blob),file:typeof File=='function'?new File([blob],nombre,{type:'image/png'}):null};
+ const c=cli(p.clienteId);
+ hoja('Recibo',`<p class="sm" style="margin:0">${esc(nomCli(p))} · ${fmt(p.total)}${debe(p)>0?' · debe '+fmt(debe(p)):' · pagado'}</p>
+  <img class="recibo-img" src="${RECIBO.url}" alt="Recibo">
+  <button type="button" class="btn caramelo wa" data-a="reciboEnviar" style="margin-top:18px">${ic('wa')}Enviar recibo</button>
+  <button type="button" class="btn plano" data-a="reciboGuardar">${ic('bajar')}Guardar imagen</button>
+  ${c&&telWa(c.tel)?`<p class="sm" style="margin:4px 2px 0">Al tocar «Enviar recibo» elige WhatsApp y luego a ${esc(c.nombre)}.</p>`:''}`,{sinBoton:true})}
+function reciboEnviar(){if(!RECIBO)return;
+ if(RECIBO.file&&navigator.canShare&&navigator.canShare({files:[RECIBO.file]})){navigator.share({files:[RECIBO.file],title:'Recibo Miss Lacitoss'}).catch(e=>{if(!e||e.name!='AbortError')descargar(RECIBO.blob,RECIBO.nombre)});return}
+ descargar(RECIBO.blob,RECIBO.nombre)}
+
 /* ---------- LISTA DE COMPRAS ---------- */
 function comprasHtml(){
  const pend=D.compras.filter(c=>!c.hecho),hechas=D.compras.filter(c=>c.hecho);
@@ -881,6 +958,24 @@ function instalarTxt(){
   :'Para tenerla como app: toca los 3 puntitos del navegador y luego «Agregar a la pantalla principal» o «Instalar».'}</span></p>`}
 
 /* ---------- PEDIDOS ---------- */
+let VISTA_P='lista',SEM=0;
+/* lunes de la semana (SEM=0 la actual), con fechas locales, nunca toISOString */
+function lunes(off){const d=new Date();d.setHours(12,0,0,0);d.setDate(d.getDate()-((d.getDay()+6)%7)+off*7);return d}
+const diaLargo=iso=>{const[a,m,d]=iso.split('-').map(Number),x=new Date(a,m-1,d);return DIAS[x.getDay()]+' '+d+' de '+MESES[m-1]};
+function calHtml(){
+ const pend=D.pedidos.filter(p=>!p.entregado),h=hoy(),L=lunes(SEM),dias=[...Array(7)].map((_,i)=>{const d=new Date(L);d.setDate(L.getDate()+i);return isoDe(d)});
+ const fila=p=>{const e=etapaDe(p),db=debe(p);
+  return`<button class="ent-row" data-a="verPedido" data-id="${p.id}"><span class="tx"><b>${esc(nomCli(p))}</b><span class="sm">${esc(p.items.map(i=>i.cant+' '+i.nombre).join(', '))}</span></span>
+   ${e=='listo'?'<span class="tag t-menta">Listo</span>':e=='haciendo'?'<span class="tag t-cielo">Haciéndolo</span>':''}${db>0?`<span class="tag t-coral">Debe ${fmt(db)}</span>`:''}</button>`};
+ const tarde=SEM==0?pend.filter(p=>p.entrega&&p.entrega<h).sort((a,b)=>a.entrega.localeCompare(b.entrega)):[];
+ const sinFecha=pend.filter(p=>!p.entrega);
+ const rango=`${+dias[0].slice(8)} de ${MESES[+dias[0].slice(5,7)-1]} al ${+dias[6].slice(8)} de ${MESES[+dias[6].slice(5,7)-1]}`;
+ return`<div class="mes"><button data-a="sem" data-id="-1" aria-label="Semana anterior">${ic('izq')}</button><b class="d" style="font-size:17px">${SEM==0?'Esta semana':SEM==1?'La próxima semana':SEM==-1?'La semana pasada':rango}<br><small class="sm" style="font-family:var(--fb)">${rango}</small></b><button data-a="sem" data-id="1" aria-label="Semana siguiente">${ic('der')}</button></div>
+  ${tarde.length?`<div class="dia tarde"><h3 class="d">Atrasados <small>${plural(tarde.length,'pedido','pedidos')}</small></h3>${tarde.map(p=>`<div class="sm" style="margin:6px 2px -2px">Era para el ${fe(p.entrega)}</div>`+fila(p)).join('')}</div>`:''}
+  ${dias.map(d=>{const l=pend.filter(p=>p.entrega==d);const t=d==h?'Hoy':diasHasta(d)==1?'Mañana':diaLargo(d);
+   return`<div class="dia ${d==h?'hoy':''}"><h3 class="d" style="text-transform:none">${t.charAt(0).toUpperCase()+t.slice(1)} <small>${d==h||diasHasta(d)==1?diaLargo(d):''}${l.length?' · '+plural(l.length,'entrega','entregas'):''}</small></h3>
+    ${l.length?l.map(fila).join(''):'<div class="libre">Sin entregas</div>'}</div>`}).join('')}
+  ${sinFecha.length?`<div class="dia"><h3 class="d">Sin fecha de entrega <small>${plural(sinFecha.length,'pedido','pedidos')}</small></h3>${sinFecha.map(fila).join('')}</div>`:''}`}
 function pPedidos(){
  const q=norm(BUSCA_P.trim());
  const base=D.pedidos.filter(p=>!q||norm(nomCli(p)).includes(q)||p.items.some(i=>norm(i.nombre).includes(q))||norm(p.detalle).includes(q));
@@ -888,8 +983,11 @@ function pPedidos(){
  let lista=grupos[FILTRO];
  lista=FILTRO=='pend'?lista.slice().sort((a,b)=>(a.entrega||'9').localeCompare(b.entrega||'9')):lista.slice().sort((a,b)=>(b.fecha+b.id).localeCompare(a.fecha+a.id));
  const ch=(k,t)=>`<button class="chip ${FILTRO==k?'on':''}" data-a="filtro" data-id="${k}">${t} <small>${grupos[k].length}</small></button>`;
+ const seg=`<div class="seg"><button class="${VISTA_P=='lista'?'on':''}" data-a="vistaP" data-id="lista">Lista</button><button class="${VISTA_P=='cal'?'on':''}" data-a="vistaP" data-id="cal">Calendario</button></div>`;
+ if(VISTA_P=='cal'){$('#pg-pedidos').innerHTML=`<button class="btn caramelo c-rosa" data-a="nuevoPedido">${ic('mas')}Anotar pedido o venta</button>${seg}${calHtml()}`;return}
  $('#pg-pedidos').innerHTML=`
  <button class="btn caramelo c-rosa" data-a="nuevoPedido">${ic('mas')}Anotar pedido o venta</button>
+ ${seg}
  <div class="buscar">${ic('lupa')}<input id="bp" type="search" placeholder="Buscar por clienta o producto" value="${esc(BUSCA_P)}"></div>
  <div class="scroll">${ch('pend','Por entregar')}${ch('deben','Me deben')}${ch('ok','Entregados')}${ch('todos','Todos')}</div>
  ${FILTRO=='deben'&&grupos.deben.length?`<button class="btn plano" data-a="cobrarVarias" style="color:#5fdc8f">${ic('wa')}Cobrar a todas por WhatsApp</button>`:''}
@@ -915,6 +1013,7 @@ function cardPedido(p){
   ${d>0?`<button class="mini caramelo c-menta" data-a="cobrar" data-id="${p.id}">${ic('dinero','s')}Cobrar</button>`:''}
   <button class="mini" data-a="entregar" data-id="${p.id}">${p.entregado?ic('deshacer','s')+'No lo he entregado':ic('entregar','s')+'Ya lo entregué'}</button>
   ${c&&c.tel?`<button class="mini" data-a="waPedido" data-id="${p.id}" style="color:#5fdc8f">${ic('wa','s')}WhatsApp</button>`:''}
+  <button class="mini" data-a="recibo" data-id="${p.id}">${ic('nota','s')}Recibo</button>
   ${enNube()?`<button class="mini ico" data-a="fotoAdd" data-id="${p.id}" aria-label="Agregar foto">${ic('camara','s')}</button>`:''}
   <button class="mini ico" data-a="editPedido" data-id="${p.id}" aria-label="Editar">${ic('lapiz','s')}</button>
   <button class="mini ico borrar" data-a="borrarPedido" data-id="${p.id}" aria-label="Borrar">${ic('basura','s')}</button>
@@ -1682,7 +1781,7 @@ const A={
  tab:id=>irA(id),cerrar:()=>cerrar(),
  filtro:id=>{FILTRO=id;pintar()},
  verDeben:()=>{FILTRO='deben';BUSCA_P='';irA('pedidos')},
- verPedido:id=>{FILTRO='todos';BUSCA_P='';irA('pedidos');const el=$('#p-'+id);if(el)el.scrollIntoView({block:'center'})},
+ verPedido:id=>{FILTRO='todos';BUSCA_P='';VISTA_P='lista';irA('pedidos');const el=$('#p-'+id);if(el)el.scrollIntoView({block:'center'})},
  verPedCli:id=>{BUSCA_P=cli(id).nombre;FILTRO='todos';irA('pedidos')},
  nuevoPedido:()=>formPedido(null),
  editPedido:id=>formPedido(ped(id)),
@@ -1726,6 +1825,11 @@ const A={
  nubeInfo:()=>nubeInfo(),
  olvide:()=>olvide(),
  recTodos:()=>{REC_TODOS=!REC_TODOS;pintar()},
+ recibo:id=>recibo(id),
+ reciboEnviar:()=>reciboEnviar(),
+ reciboGuardar:()=>{if(RECIBO)descargar(RECIBO.blob,RECIBO.nombre)},
+ vistaP:v=>{VISTA_P=v;SEM=0;pintar();window.scrollTo(0,0)},
+ sem:d=>{SEM+=+d;pintar()},
  fotoAdd:id=>fotoAdd(id),
  fotoVer:(id,b)=>fotoVer(id,b.dataset.ruta),
  fotoQuitar:(id,b)=>fotoQuitar(id,b.dataset.ruta),

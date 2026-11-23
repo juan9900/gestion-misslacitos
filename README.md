@@ -33,7 +33,7 @@ App web para el celular, de un solo archivo, para manejar el emprendimiento Miss
 
 ## Pruebas
 
-`python pruebas/preparar.py` arma una copia con una nube simulada y la sirve en `http://127.0.0.1:8766/runner.html`. Ahí corren 163 comprobaciones (sincronización entre teléfonos, sin internet, validaciones, PDF). No tocan la base de datos real y no se publican en el sitio.
+`python pruebas/preparar.py` arma una copia con una nube simulada y la sirve en `http://127.0.0.1:8766/runner.html`. Ahí corren 180 comprobaciones (sincronización entre teléfonos, sin internet, validaciones, PDF). No tocan la base de datos real y no se publican en el sitio.
 
 ## Publicar en Netlify
 

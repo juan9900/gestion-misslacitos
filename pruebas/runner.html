@@ -50,7 +50,7 @@ async function T(nombre,fn){try{await fn()}catch(e){ok(nombre+' (excepción)',fa
   ok('2a total con centavos',q('#pf-total').textContent=='$7,50',q('#pf-total').textContent);
   pon('#sf [name=abono]','2,5');enviar();
   ok('2b pedido guardado',E('D.pedidos.length')==1&&!hojaAbierta(),errTxt());
-  ok('2c stock baja de 5 a 3',E('D.productos[0].stock')==3);
+  ok('2c stock baja de 5 a 3',E('stockDe(D.productos[0])')==3);
   ok('2d debe 5,00',E('debe(D.pedidos[0])')==500);
   pon('#cp-in','Cinta rosada');clic('[data-a=compraAdd]');pon('#cp-in','Hilo');clic('[data-a=compraAdd]');
   ok('2e dos compras anotadas',E('D.compras.length')==2);
@@ -63,7 +63,7 @@ async function T(nombre,fn){try{await fn()}catch(e){ok(nombre+' (excepción)',fa
   await telefono('B');
   ok('3a B empieza en el inicio de sesión',!q('#login').hidden);
   await entrar();await wait(300);
-  ok('3b B recibió los datos',E('D.clientas.length')==1&&E('D.pedidos.length')==1&&E('D.compras.length')==2&&E('D.productos[0].stock')==3,E('JSON.stringify({c:D.clientas.length,p:D.pedidos.length,co:D.compras.length})'));
+  ok('3b B recibió los datos',E('D.clientas.length')==1&&E('D.pedidos.length')==1&&E('D.compras.length')==2&&E('stockDe(D.productos[0])')==3,E('JSON.stringify({c:D.clientas.length,p:D.pedidos.length,co:D.compras.length})'));
   ok('3c B no vuelve a subir lo recibido',E('nPend()')==0);
   ok('3d recordatorio de deuda aparece en B',E('recordatorios().some(r=>/te debe/.test(r.tit))'));
  });
@@ -133,10 +133,10 @@ async function T(nombre,fn){try{await fn()}catch(e){ok(nombre+' (excepción)',fa
 
  await T('9 buscador no pierde el foco al llegar datos',async()=>{
   E("irA('clientas')");const b=q('#bc');b.focus();pon('#bc','mar');
-  const idp=E('D.productos[0].id');setSrv(s=>{const r=s.rows['productos:'+idp];r.data.stock=9;s.clock++;r.actualizado=new Date(1.8e12+s.clock*1000).toISOString()});
+  const idp=E('D.productos[0].id');setSrv(s=>{const r=s.rows['productos:'+idp];r.data.hechas=r.data.hechas+6;s.clock++;r.actualizado=new Date(1.8e12+s.clock*1000).toISOString()});
   await E('bajar()');
   ok('9a sigue escribiendo en el buscador',d.activeElement&&d.activeElement.id=='bc'&&q('#bc').value=='mar',d.activeElement&&d.activeElement.id);
-  ok('9b el dato sí llegó',E('D.productos[0].stock')==9);
+  ok('9b el dato sí llegó',E('stockDe(D.productos[0])')==9);
   ok('9c búsqueda sin acentos',d.querySelectorAll('#pg-clientas article').length==1);
   E("BUSCA_C='';irA('inicio')");
  });
@@ -179,7 +179,7 @@ async function T(nombre,fn){try{await fn()}catch(e){ok(nombre+' (excepción)',fa
   ok('11p pedido antiguo queda con su fecha y sin clienta es venta rápida',!hojaAbierta()&&E('D.pedidos.at(-1).fecha')=='2026-10-15'&&E('nomCli(D.pedidos.at(-1))')=='Venta rápida',errTxt());
   ok('11q el corte de octubre lo cuenta',E("corte('2026-10').P.length")==1);
   E('A.editProd()');pon('#sf [name=nombre]','X');clic('[data-a=pcCat]');pon('#sf [name=precio]','2');pon('#sf [name=stock]','-7');enviar();
-  ok('11r stock negativo se guarda como 0',!hojaAbierta()&&E('D.productos.at(-1).stock')==0,errTxt());
+  ok('11r stock negativo se guarda como 0',!hojaAbierta()&&E('stockDe(D.productos.at(-1))')==0,errTxt());
   ok('11s texto con HTML no se interpreta',(()=>{pon('#cp-in','<img src=x onerror=alert(1)>');clic('[data-a=compraAdd]');return !q('.cp img')&&[...d.querySelectorAll('.cp .txt')].some(x=>/<img/.test(x.textContent))})());
   E("A.cobrar('no-existe')");ok('11t acción sobre algo que ya no existe no rompe la app',!hojaAbierta());
   E("irA('dinero')");ok('11u pantalla Dinero pinta sin errores',q('#pg-dinero').children.length>5);
@@ -187,10 +187,10 @@ async function T(nombre,fn){try{await fn()}catch(e){ok(nombre+' (excepción)',fa
  });
 
  await T('12 borrar pedido devuelve stock y borra sus pagos',async()=>{
-  const idp=E('D.pedidos[0].id'),st=E('D.productos[0].stock'),pagos=E(`D.movs.filter(m=>m.pedidoId=='${idp}').length`);
+  const idp=E('D.pedidos[0].id'),st=E('stockDe(D.productos[0])'),pagos=E(`D.movs.filter(m=>m.pedidoId=='${idp}').length`);
   E(`A.borrarPedido('${idp}')`);enviar();
   ok('12a pedido borrado',!E(`ped('${idp}')`));
-  ok('12b stock devuelto',E('D.productos[0].stock')==st+2,{antes:st,ahora:E('D.productos[0].stock')});
+  ok('12b stock devuelto',E('stockDe(D.productos[0])')==st+2,{antes:st,ahora:E('stockDe(D.productos[0])')});
   ok('12c pagos del pedido borrados',pagos>0&&E(`D.movs.filter(m=>m.pedidoId=='${idp}').length`)==0);
  });
 
@@ -213,6 +213,38 @@ async function T(nombre,fn){try{await fn()}catch(e){ok(nombre+' (excepción)',fa
   clic('[data-a=nubeElegir][data-id=juntar]');enviar();await wait(1800);await sync();
   ok('14b juntar conserva lo de los dos lados',E('D.clientas.some(c=>c.id=="solo-c")')&&E('D.clientas.length')>=3&&filas('clientas').some(r=>r.id=='solo-c'),E('D.clientas.map(c=>c.nombre)'));
   ok('14c datos viejos sin lista de compras no rompen',Array.isArray(E('D.compras')));
+ });
+
+ await T('16 dos teléfonos venden el mismo producto a la vez',async()=>{
+  const vender=()=>{E('A.nuevoPedido()');clic('#pf-prods [data-a=pfAdd]');enviar()};
+  await telefono('A');await wait(700);await sync();const ini=E('stockDe(D.productos[0])');
+  vender();                                   /* A vende 1 y todavía no sube */
+  await telefono('B');await wait(700);await sync();
+  vender();await wait(1500);await sync();     /* B vende 1 y sube */
+  await telefono('A');await wait(700);await wait(1500);await sync();
+  ok('16a A descuenta las dos ventas',E('stockDe(D.productos[0])')==ini-2,{ini,ahora:E('stockDe(D.productos[0])')});
+  await telefono('B');await wait(700);await sync();
+  ok('16b B también',E('stockDe(D.productos[0])')==ini-2,{ini,ahora:E('stockDe(D.productos[0])')});
+  E('A.llegaron(D.productos[0].id)');pon('#sf [name=n]','10');enviar();
+  ok('16c sumar piezas hechas',E('stockDe(D.productos[0])')==ini+8);
+  E('A.editProd(D.productos[0].id)');pon('#sf [name=stock]','4');enviar();
+  ok('16d corregir el conteo a mano deja exactamente ese número',E('stockDe(D.productos[0])')==4,E('JSON.stringify(D.productos[0])'));
+  clic('[data-a=tab][data-id=inventario]');const pid=E('D.productos[0].id'),bt=n=>clic(`[data-a=stock][data-id="${pid}"][data-n="${n}"]`);bt(1);bt(-1);bt(-1);
+  ok('16e botones + y − funcionan',E('stockDe(D.productos[0])')==3);
+  E("irA('inicio')");
+ });
+
+ await T('17 producto guardado con el formato anterior',async()=>{
+  const viejo={v:2,productos:[{id:'pv',nombre:'Viejo',cat:'Lazos',precio:100,costo:0,stock:7,minimo:2,encargo:false}],clientas:[],
+   pedidos:[{id:'ov',clienteId:'',items:[{pid:'pv',nombre:'Viejo',cant:3,precio:100}],total:300,pagoPrevio:300,detalle:'',entrega:'',entregado:true,fecha:'2026-11-01'}],movs:[],cats:['Lazos'],copiaAt:''};
+  guardarTel(actual);APP.forEach(k=>localStorage.removeItem(k));actual='V';localStorage.setItem('negocio',JSON.stringify(viejo));
+  setSrv(s=>s.down=true);await abrir();
+  ok('17a conserva las 7 piezas que tenía',E('stockDe(D.productos[0])')==7,E('JSON.stringify(D.productos[0])'));
+  E('A.nuevoPedido()');clic('#pf-prods [data-a=pfAdd]');enviar();
+  ok('17b una venta nueva descuenta',E('stockDe(D.productos[0])')==6);
+  E("A.borrarPedido(D.pedidos.at(-1).id)");enviar();
+  ok('17c borrar la venta devuelve la pieza',E('stockDe(D.productos[0])')==7);
+  setSrv(s=>s.down=false);await telefono('A');await wait(600);
  });
 
  await T('15 reportes PDF',async()=>{

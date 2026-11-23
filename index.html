@@ -62,7 +62,7 @@ header{position:sticky;top:0;z-index:20;padding:calc(10px + env(safe-area-inset-
 .logo img{width:100%;height:100%;border-radius:50%;display:block}
 .cab h1{margin:0;font-size:26px;line-height:1.05;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .cab>div:last-child{min-width:0}
-.cab small{display:block;color:var(--muted);font-size:13px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;margin-top:3px}
+.cab small{display:block;color:var(--muted);font-size:13px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;margin-top:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 header .puntada{max-width:640px;margin:0 auto}
 
 main{max-width:640px;margin:0 auto;padding:16px 16px 8px}
@@ -499,9 +499,11 @@ function cargar(){
  const viejo=o&&o.v!==2;
  if(viejo){try{localStorage.setItem(KEY+'_v1_respaldo',raw)}catch(e){}}
  D=migrar(o);
- if(viejo)guardar(true);
+ const conv=fijarHechas();
+ if(viejo||conv)guardar(true);
 }
 function guardar(silencio){
+ fijarHechas();
  try{localStorage.setItem(KEY,JSON.stringify(D))}catch(e){aviso('No se pudo guardar. Revisa el espacio del teléfono.',true)}
  marcarCambios();
  if(!silencio)pintar();
@@ -513,7 +515,13 @@ const pagado=p=>(p.pagoPrevio||0)+sum(D.movs.filter(m=>m.pedidoId==p.id&&m.tipo=
 const debe=p=>Math.max(0,p.total-pagado(p));
 const nomCli=p=>{const c=cli(p.clienteId);return c?c.nombre:'Venta rápida'};
 const unidades=p=>sum(p.items,i=>i.cant);
-function moverStock(items,signo){items.forEach(i=>{const pr=i.pid&&prod(i.pid);if(pr&&!pr.encargo)pr.stock=(pr.stock||0)+signo*i.cant})}
+/* INVENTARIO: lo que queda = piezas hechas (p.hechas) − piezas que salieron en pedidos.
+   Así dos teléfonos que venden a la vez no se pisan: cada venta es su propio registro. */
+const vendidoDe=id=>{let n=0;for(const p of D.pedidos)for(const i of p.items)if(i.pid==id)n+=i.cant;return n};
+const stockDe=p=>p.encargo?0:(p.hechas===undefined?(p.stock||0):p.hechas-vendidoDe(p.id));
+/* productos guardados con el formato anterior (número fijo en p.stock) pasan al nuevo */
+function fijarHechas(){let n=0;D.productos.forEach(p=>{if(p.hechas===undefined){p.hechas=(p.stock||0)+vendidoDe(p.id);n++}});return n}
+function moverStock(){}   /* ya no hace falta: el inventario sale de los pedidos */
 
 /* ---------- avisos ---------- */
 let tAviso;
@@ -581,7 +589,7 @@ function recordatorios(){
    L.push({u:p.entregado?2:4,o:-dias,t:p.entregado?'coral':'durazno',ic:'dinero',tit:n+' te debe '+fmt(db),
     sub:(dias?'Pedido de hace '+plural(dias,'día','días'):'Pedido de hoy'),tag:p.entregado?'Ya entregado':'',a:'cobrar',aTxt:'Cobrar',id:p.id})}
  });
- D.productos.filter(p=>!p.encargo&&(p.stock||0)<=(p.minimo??2)).forEach(p=>{const st=p.stock||0;
+ D.productos.filter(p=>!p.encargo&&stockDe(p)<=(p.minimo??2)).forEach(p=>{const st=stockDe(p);
   L.push({u:st<=0?2:6,o:st,t:st<=0?'coral':'limon',ic:'caja',tit:st<=0?'Se agotó: '+p.nombre:(st==1?'Queda 1 de ':'Quedan '+st+' de ')+p.nombre,sub:'Haz o compra más',tag:'',a:'llegaron',aTxt:'Sumar',id:p.id,prod:true})});
  return L.sort((a,b)=>a.u-b.u||a.o-b.o)}
 function recHtml(){
@@ -620,7 +628,7 @@ const deudaTotal=()=>sum(D.pedidos,debe);
 function pInicio(){
  const n=new Date(),c=corte(mesDe(hoy())),deudoras=D.pedidos.filter(p=>debe(p)>0);
  const pend=D.pedidos.filter(p=>!p.entregado).sort((a,b)=>(a.entrega||'9').localeCompare(b.entrega||'9'));
- const bajos=D.productos.filter(p=>!p.encargo&&(p.stock||0)<=(p.minimo??2));
+ const bajos=D.productos.filter(p=>!p.encargo&&stockDe(p)<=(p.minimo??2));
  const hayDatos=D.pedidos.length+D.movs.length+D.productos.length>0;
  const diasCopia=D.copiaAt?-diasHasta(D.copiaAt):999;
  const hora=n.getHours(),saludo=hora<12?'¡Buenos días!':hora<19?'¡Buenas tardes!':'¡Buenas noches!';
@@ -757,7 +765,7 @@ function pfProds(){
 function pfItems(){
  const el=$('#pf-items');if(!el)return;
  el.innerHTML=F.items.map((i,n)=>{const pr=i.pid&&prod(i.pid);
-  const hint=pr?(pr.encargo?'Por encargo':'Te quedan '+((pr.stock||0)+(F.viejo?sum(F.viejo.items.filter(x=>x.pid==i.pid),x=>x.cant):0))):'';
+  const hint=pr?(pr.encargo?'Por encargo':'Te quedan '+(stockDe(pr)+(F.viejo?sum(F.viejo.items.filter(x=>x.pid==i.pid),x=>x.cant):0))):'';
   return`<div class="item"><div class="fila" style="align-items:center">${i.pid?`<div style="min-width:0"><b class="d" style="font-size:18px">${esc(i.nombre)}</b><div class="sm" style="font-size:13px">${hint}</div></div>`
    :`<input class="in" style="margin:0;min-height:48px" placeholder="¿Qué producto?" maxlength="80" value="${esc(i.nombre)}" data-it="${n}" data-k="nombre">`}
    <button type="button" class="quitar" data-a="pfQuitar" data-id="${n}" aria-label="Quitar">${ic('cerrar','s')}</button></div>
@@ -796,7 +804,7 @@ function guardarPedido(fd){
   if(abono>0)D.movs.push({id:uid(),tipo:'ing',concepto:(abono>=total?'Pago de ':'Abono de ')+(clienteId?cli(clienteId).nombre:'venta rápida'),cat:'Pago de pedido',monto:abono,fecha,pedidoId:p.id});
   guardar();aviso('¡Pedido guardado!');
  }
- const faltan=F.items.filter(i=>{const pr=i.pid&&prod(i.pid);return pr&&!pr.encargo&&pr.stock<0});
+ const faltan=F.items.filter(i=>{const pr=i.pid&&prod(i.pid);return pr&&!pr.encargo&&stockDe(pr)<0});
  if(faltan.length)setTimeout(()=>aviso('Según el inventario no te alcanzaban: '+faltan.map(i=>i.nombre).join(', ')+'. Revisa el inventario.',true),2700);
 }
 function cobrar(id){const p=ped(id);if(!p)return aviso('Ese pedido ya no existe.',true);const d=debe(p);
@@ -858,21 +866,21 @@ function pInventario(){
  const cats=[...new Set(ps.map(p=>p.cat||'Otros'))].sort((a,b)=>D.cats.indexOf(a)-D.cats.indexOf(b));
  $('#pg-inventario').innerHTML=`<button class="btn caramelo c-cielo" data-a="editProd">${ic('mas')}Producto nuevo</button>
  ${D.productos.length?`<div class="kpis" style="margin-top:6px">
-  <div class="kpi"><small>${ic('caja','s')}Piezas hechas</small><b class="d">${sum(cont,p=>Math.max(0,p.stock||0))}</b></div>
-  <div class="kpi"><small>${ic('brillo','s')}Si vendes todo</small><b class="d k-menta">${fmt(sum(cont,p=>Math.max(0,p.stock||0)*p.precio))}</b></div>
+  <div class="kpi"><small>${ic('caja','s')}Piezas disponibles</small><b class="d">${sum(cont,p=>Math.max(0,stockDe(p)))}</b></div>
+  <div class="kpi"><small>${ic('brillo','s')}Si vendes todo</small><b class="d k-menta">${fmt(sum(cont,p=>Math.max(0,stockDe(p))*p.precio))}</b></div>
  </div>
  <div class="buscar">${ic('lupa')}<input id="bi" type="search" placeholder="Buscar producto" value="${esc(BUSCA_I)}"></div>`:''}
  ${cats.map(c=>{const l=ps.filter(p=>(p.cat||'Otros')==c).sort((a,b)=>a.nombre.localeCompare(b.nombre));return titulo(esc(c),l.length)+l.map(cardProd).join('')}).join('')
   ||`<div style="margin-top:12px">${vacioHtml(q?'lupa':'tijera',q?'No encontré «'+esc(BUSCA_I)+'»':'Anota aquí tus productos con su precio.<br>Cuando hagas un pedido, se descuentan solos.')}</div>`}`;
  conBusqueda('#bi',v=>BUSCA_I=v);
 }
-function cardProd(p){const bajo=!p.encargo&&(p.stock||0)<=(p.minimo??2),gana=p.costo?p.precio-p.costo:null;
+function cardProd(p){const st=Math.max(0,stockDe(p)),bajo=!p.encargo&&stockDe(p)<=(p.minimo??2),gana=p.costo?p.precio-p.costo:null;
  return`<article class="card prod ${bajo?'bajo':''}">
  <div class="fila"><div style="min-width:0"><div class="nm d">${esc(p.nombre)}</div>
   <div class="meta"><span class="precio d" style="color:var(--ink)">${fmt(p.precio)}</span>${p.costo?`<span>me cuesta ${fmt(p.costo)}</span>`:''}</div>
   ${gana!==null?`<div class="sm ${gana<0?'k-coral':'k-menta'}" style="font-weight:800;margin-top:2px">${gana<0?'Pierdes ':'Ganas '}${fmt(Math.abs(gana))} por cada uno</div>`:''}</div>
-  ${p.encargo?`<span class="tag t-lila">${ic('tijera','s')}Por encargo</span>`:bajo?`<span class="tag t-coral">${(p.stock||0)<=0?'Agotado':'Queda poco'}</span>`:''}</div>
- ${p.encargo?'':`<div class="stock"><button class="redondo" data-a="stock" data-id="${p.id}" data-n="-1" aria-label="Quitar uno">${ic('menos')}</button><b class="d">${p.stock||0}</b><button class="redondo mas" data-a="stock" data-id="${p.id}" data-n="1" aria-label="Sumar uno">${ic('mas')}</button><span class="lbl">${(p.stock||0)==1?'pieza hecha':'piezas hechas'}</span></div>`}
+  ${p.encargo?`<span class="tag t-lila">${ic('tijera','s')}Por encargo</span>`:bajo?`<span class="tag t-coral">${st<=0?'Agotado':'Queda poco'}</span>`:''}</div>
+ ${p.encargo?'':`<div class="stock"><button class="redondo" data-a="stock" data-id="${p.id}" data-n="-1" aria-label="Quitar uno">${ic('menos')}</button><b class="d">${st}</b><button class="redondo mas" data-a="stock" data-id="${p.id}" data-n="1" aria-label="Sumar uno">${ic('mas')}</button><span class="lbl">${st==1?'pieza disponible':'piezas disponibles'}</span></div>`}
  <div class="acts">
   ${p.encargo?'':`<button class="mini" data-a="llegaron" data-id="${p.id}">${ic('bajar','s')}Hice o compré más</button>`}
   <button class="mini ico" data-a="editProd" data-id="${p.id}" aria-label="Editar">${ic('lapiz','s')}</button>
@@ -891,7 +899,7 @@ function editProd(id){const p=id?prod(id):{nombre:'',cat:'',precio:0,costo:0,sto
   <button type="button" class="opcion ${enc?'':'on'}" data-a="pcEnc" data-id="0"><span class="ico">${ic('caja')}</span><div>Los tengo hechos<span class="sm">Llevar la cuenta de cuántos quedan</span></div></button>
   <button type="button" class="opcion ${enc?'on':''}" data-a="pcEnc" data-id="1"><span class="ico">${ic('tijera')}</span><div>Lo hago por encargo<span class="sm">Ej: toallas con nombre. No se cuentan.</span></div></button></div></div>
  <div id="pc-stock" ${enc?'hidden':''}>
-  <label class="f">${paso(6,'¿Cuántos tienes hechos ahora?')}<input class="in" name="stock" type="number" inputmode="numeric" min="0" value="${p.stock||0}"></label>
+  <label class="f">${paso(6,'¿Cuántos tienes hechos ahora?')}<input class="in" name="stock" type="number" inputmode="numeric" min="0" value="${Math.max(0,stockDe(p))}"></label>
   <label class="f">${paso(7,'Avísame cuando queden')}<small>Te aparece un aviso en Inicio.</small><input class="in" name="minimo" type="number" inputmode="numeric" min="0" value="${p.minimo??2}"></label></div>`,
  {c:'c-cielo',onOk:fd=>{const nom=String(fd.get('nombre')).trim(),precio=aCent(fd.get('precio'));
   let c=PC.cat;if(c=='__nueva'){c=String(fd.get('catNueva')||'').trim();if(c&&!D.cats.some(x=>x.toLowerCase()==c.toLowerCase()))D.cats.push(c)}
@@ -900,6 +908,7 @@ function editProd(id){const p=id?prod(id):{nombre:'',cat:'',precio:0,costo:0,sto
   if(!precio)return error('Escribe a cuánto lo vendes.');
   if(precio>MAX_MONTO||aCent(fd.get('costo'))>MAX_MONTO)return error('Ese precio es demasiado alto. Revísalo.');
   const d={nombre:nom,cat:c,precio,costo:aCent(fd.get('costo')),encargo:PC.enc,stock:PC.enc?0:Math.min(99999,Math.max(0,parseInt(fd.get('stock'))||0)),minimo:Math.min(9999,Math.max(0,parseInt(fd.get('minimo'))||0))};
+  d.hechas=d.stock+(id?vendidoDe(id):0);   /* lo que dice que tiene ahora + lo que ya salió en pedidos */
   if(id)Object.assign(p,d);else D.productos.push({id:uid(),...d});guardar();aviso('Producto guardado')}});
  PC={cat:p.cat||'',enc};pcCats();
 }
@@ -907,15 +916,15 @@ function pcCats(){$('#pc-cats').innerHTML=D.cats.map(c=>`<button type="button" c
  +`<button type="button" class="chip add ${PC.cat=='__nueva'?'on':''}" data-a="pcCat" data-id="__nueva">${ic('mas','s')}Otro tipo</button>`;
  $('#pc-nueva').hidden=PC.cat!='__nueva'}
 function llegaron(id){const p=prod(id);
- hoja(p.nombre,`<div class="nota">${ic('caja')}<span>Ahora tienes <b>${plural(p.stock||0,'pieza','piezas')}</b>.</span></div>
+ hoja(p.nombre,`<div class="nota">${ic('caja')}<span>Ahora tienes <b>${plural(Math.max(0,stockDe(p)),'pieza','piezas')}</b>.</span></div>
  <label class="f">${paso(1,'¿Cuántos hiciste o compraste?')}<input class="in" name="n" type="number" inputmode="numeric" min="1" placeholder="Ej: 10"></label>
  ${campoDinero('monto',2,'¿Cuánto gastaste en eso? <em>(opcional)</em>','','Si lo pones, se anota solo como inversión.')}`,
  {ok:'Sumar al inventario',c:'c-cielo',onOk:fd=>{const n=parseInt(fd.get('n'))||0,m=aCent(fd.get('monto'));
   if(n<=0)return error('Escribe cuántos hiciste o compraste.');
   if(n>9999||m>MAX_MONTO)return error('Ese número es demasiado alto. Revísalo.');
-  p.stock=(p.stock||0)+n;
+  fijarHechas();p.hechas+=n;
   if(m)D.movs.push({id:uid(),tipo:'inv',concepto:n+' '+p.nombre,cat:'Mercancía',monto:m,fecha:hoy(),pedidoId:''});
-  guardar();aviso(`Ahora tienes ${p.stock} ${p.nombre}`)}})}
+  guardar();aviso(`Ahora tienes ${stockDe(p)} ${p.nombre}`)}})}
 
 /* ---------- DINERO Y CORTE ---------- */
 function pDinero(){
@@ -1232,7 +1241,7 @@ const mesCap=k=>{const t=nombreMes(k);return t[0].toUpperCase()+t.slice(1)};
 function vendidos(P){const g={};P.forEach(p=>p.items.forEach(i=>{const k=i.nombre.trim();g[k]=g[k]||[k,0,0];g[k][1]+=i.cant;g[k][2]+=i.cant*i.precio}));return Object.values(g).sort((a,b)=>b[1]-a[1])}
 function porClienta(P){const g={};P.forEach(p=>{const k=p.clienteId||'_';g[k]=g[k]||[nomCli(p),0,0,0];g[k][1]++;g[k][2]+=p.total;g[k][3]+=debe(p)});return Object.values(g).sort((a,b)=>b[2]-a[2])}
 function tablaInventario(doc){pdfTabla(doc,['Producto','Tipo','Precio','Costo','Piezas'],D.productos.slice().sort((a,b)=>(a.cat||'').localeCompare(b.cat||'')||a.nombre.localeCompare(b.nombre))
- .map(p=>[p.nombre,p.cat||'',fmtP(p.precio),p.costo?fmtP(p.costo):'-',p.encargo?'Por encargo':String(p.stock||0)]),{cols:{2:DER,3:DER,4:DER}})}
+ .map(p=>[p.nombre,p.cat||'',fmtP(p.precio),p.costo?fmtP(p.costo):'-',p.encargo?'Por encargo':String(Math.max(0,stockDe(p)))]),{cols:{2:DER,3:DER,4:DER}})}
 function tablaDeudas(doc,P){const l=P.filter(p=>debe(p)>0).sort((a,b)=>a.fecha.localeCompare(b.fecha));
  pdfTabla(doc,['Clienta','Pedido del','Productos','Total','Debe'],l.map(p=>[nomCli(p),fe(p.fecha),prodsTxt(p),fmtP(p.total),fmtP(debe(p))]),
   {cols:{3:DER,4:{halign:'right',fontStyle:'bold'}},foot:l.length?['Total','','','',fmtP(sum(l,debe))]:null})}
@@ -1336,7 +1345,7 @@ const A={
  editProd:id=>editProd(id),
  pcCat:c=>{PC.cat=PC.cat==c?'':c;pcCats();if(PC.cat=='__nueva')$('#pc-nueva').focus()},
  pcEnc:(id,b)=>{PC.enc=id=='1';$$('[data-a=pcEnc]').forEach(x=>x.classList.toggle('on',x==b));$('#pc-stock').hidden=PC.enc},
- stock:(id,b)=>{const p=prod(id),n=+b.dataset.n;if(n<0&&(p.stock||0)<=0)return;if(n>0&&(p.stock||0)>=99999)return;p.stock=(p.stock||0)+n;guardar()},
+ stock:(id,b)=>{const p=prod(id),n=+b.dataset.n;if(n<0&&stockDe(p)<=0)return;if(n>0&&stockDe(p)>=99999)return;fijarHechas();p.hechas+=n;guardar()},
  llegaron:id=>llegaron(id),
  borrarProd:id=>{const p=prod(id);preguntar(`Vas a borrar <b>${esc(p.nombre)}</b> del inventario.<br><br>Los pedidos viejos no se borran.`,'Sí, borrar',()=>{D.productos=D.productos.filter(x=>x.id!=id);guardar();aviso('Producto borrado')})},
  mov:t=>formMov(t,null),

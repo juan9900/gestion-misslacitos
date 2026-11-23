@@ -339,6 +339,12 @@ nav button{position:relative}
 .etapas button.on{background:var(--cielo);color:var(--tinta)}
 .etapas button.on.listo{background:var(--menta)}
 
+/* ---------- forma de pago ---------- */
+.pg-mon{display:flex;gap:8px;margin-top:10px}
+.pg-mon .chip{flex:1;justify-content:center}
+.bs-res{margin-top:10px}
+.bs-res b{color:var(--menta)}
+
 /* ---------- nube ---------- */
 .nube{margin-left:auto;flex:none;display:inline-flex;align-items:center;gap:6px;min-height:40px;padding:6px 12px;border-radius:30px;border:1.5px solid var(--line2);background:var(--card);color:var(--t,var(--muted));font-weight:800;font-size:13px}
 .nube .i{width:20px;height:20px}
@@ -508,6 +514,14 @@ function aCent(v){let s=String(v??'').trim().replace(/[^\d.,]/g,'');if(!s)return
  const n=parseFloat(s);return isFinite(n)&&n>0?Math.round(n*100):0}
 const MAX_MONTO=1e8;   /* $1.000.000,00: más que eso es un error de dedo */
 const fechaOk=s=>/^\d{4}-\d{2}-\d{2}$/.test(s)&&s>='2000-01-01'&&s<='2100-12-31'&&!isNaN(new Date(s+'T12:00:00').getTime());
+/* Bolívares, escritos como en Venezuela: 12.500,50 · 12500 · 1.250 (mil doscientos cincuenta) → céntimos */
+function aBs(v){let s=String(v??'').trim().replace(/[^\d.,]/g,'');if(!s)return 0;
+ if(s.includes(',')){s=s.split('.').join('');const i=s.lastIndexOf(',');s=s.slice(0,i).split(',').join('')+'.'+s.slice(i+1)}
+ else{const pts=s.split('.');if(pts.length>2||(pts.length==2&&pts[1].length==3))s=pts.join('')}
+ const n=parseFloat(s);return isFinite(n)&&n>0?Math.round(n*100):0}
+const fmtBs=c=>{const n=Math.abs(Math.round(c||0))/100,t=n.toFixed(2).split('.');return'Bs '+t[0].replace(/\B(?=(\d{3})+(?!\d))/g,'.')+','+t[1]};
+const tasaTxt=t=>(Math.round(t*100)/100).toFixed(2).replace('.',',').replace(/\B(?=(\d{3})+(?!\d),)/g,'.');
+const METODOS=['Pago móvil','Efectivo','Zelle','Binance','Transferencia','Otro'];
 const centInput=c=>c?(c/100).toFixed(2).replace('.',','):'';
 const numViejo=v=>Math.round((parseFloat(String(v??0).replace(',','.'))||0)*100);
 function telWa(t){let d=String(t||'').replace(/\D/g,'');if(!d)return'';
@@ -949,15 +963,44 @@ function guardarPedido(fd){
  const faltan=F.items.filter(i=>{const pr=i.pid&&prod(i.pid);return pr&&!pr.encargo&&stockDe(pr)<0});
  if(faltan.length)setTimeout(()=>aviso('Según el inventario no te alcanzaban: '+faltan.map(i=>i.nombre).join(', ')+'. Revisa el inventario.',true),2700);
 }
+let PG={met:'',bs:false};
+/* la tasa que se sugiere es la del último pago en bolívares (se sincroniza sola entre teléfonos) */
+function ultimaTasa(){const m=D.movs.filter(x=>x.tasa>0).sort((a,b)=>(b.fecha+b.id).localeCompare(a.fecha+a.id))[0];return m?m.tasa:0}
+function pagoHtml(n,m,quien){const bs=!!(m&&m.bs),t=m&&m.tasa||ultimaTasa();
+ return`<div class="f">${paso(n,quien,opc())}<div class="chips" id="pg-met">${METODOS.map(x=>`<button type="button" class="chip ${m&&m.metodo==x?'on':''}" data-a="pgMet" data-id="${x}">${x}</button>`).join('')}</div>
+  <div class="pg-mon"><button type="button" class="chip ${bs?'':'on'}" data-a="pgMon" data-id="usd">En dólares</button><button type="button" class="chip ${bs?'on':''}" data-a="pgMon" data-id="bs">En bolívares</button></div></div>
+  <div id="pg-bs" ${bs?'':'hidden'}>
+   <label class="f"><span>¿Cuántos bolívares?</span><div class="din"><b>Bs</b><input name="bs" inputmode="decimal" placeholder="0,00" value="${bs?(m.bs/100).toFixed(2).replace('.',','):''}" data-bsin></div></label>
+   <label class="f"><span>¿A qué tasa?</span><small>Bolívares por cada dólar${t&&!bs?'. Te dejé la del último pago; cámbiala si es otra.':''}</small><div class="din"><b>Bs</b><input name="tasa" inputmode="decimal" placeholder="Ej: 245,50" value="${t?tasaTxt(t):''}" data-bsin></div></label>
+   <div class="nota bs-res" id="bs-res">${ic('dinero')}<span>Escribe los bolívares y la tasa.</span></div></div>`}
+/* lee la parte de bolívares: {usd en centavos, bs en céntimos, tasa} o un texto de error */
+function leerBs(fd){const bs=aBs(fd.get('bs')),tasa=aBs(fd.get('tasa'))/100;
+ if(!bs)return'Escribe cuántos bolívares te pagaron.';if(!tasa)return'Escribe la tasa (bolívares por cada dólar).';
+ if(tasa>1e7||bs>1e13)return'Ese número es demasiado alto. Revísalo.';
+ return{usd:Math.round(bs/tasa),bs,tasa}}
+function bsEco(){const f=$('#sf');if(!f||!$('#bs-res'))return;const r=leerBs(new FormData(f)),el=$('#bs-res');
+ el.innerHTML=ic('dinero')+'<span>'+(typeof r=='string'?'Escribe los bolívares y la tasa.':`${fmtBs(r.bs)} a ${tasaTxt(r.tasa)} = <b>${fmt(r.usd)}</b>`)+'</span>';
+ if(typeof r!='string'){const mi=$('#sf [name=monto]');if(mi){mi.value=centInput(r.usd);mi.dispatchEvent(new Event('input',{bubbles:true}))}}}
+document.addEventListener('input',e=>{if(e.target.matches('[data-bsin]'))bsEco()});
+const pagoDatos=r=>{const o={metodo:PG.met||''};if(r&&typeof r!='string'){o.bs=r.bs;o.tasa=r.tasa}return o};
 function cobrar(id){const p=ped(id);if(!p)return aviso('Ese pedido ya no existe.',true);const d=debe(p);
  hoja('Cobrar a '+nomCli(p),`<div class="sel" style="background:color-mix(in srgb,var(--coral) 12%,var(--card));border-color:color-mix(in srgb,var(--coral) 40%,transparent)"><span>Te debe</span><b class="d k-coral" style="font-size:26px">${fmt(d)}</b></div>
  ${campoDinero('monto',1,'¿Cuánto te pagó ahora?',d,'Si te pagó solo una parte, cambia el número.')}
- <label class="f">${paso(2,'¿Qué día te pagó?')}<input class="in" type="date" name="fecha" value="${hoy()}"></label>`,
- {ok:'Anotar pago',onOk:fd=>{const v=aCent(fd.get('monto')),d=debe(p);if(!v)return error('Escribe cuánto te pagó.');
+ ${pagoHtml(2,null,'¿Cómo te pagó?')}
+ <label class="f">${paso(3,'¿Qué día te pagó?')}<input class="in" type="date" name="fecha" value="${hoy()}"></label>`,
+ {ok:'Anotar pago',onOk:fd=>{const d=debe(p);let v=aCent(fd.get('monto')),r=null,completo=false;
+  if(PG.bs){r=leerBs(fd);if(typeof r=='string')return error(r);
+   /* al convertir puede sobrar o faltar un poquito: si queda muy cerca de la deuda, cuenta como pago completo */
+   const tol=Math.max(5,Math.round(d*0.02));
+   if(Math.abs(r.usd-d)<=tol){v=d;completo=true}
+   else if(r.usd>d)return error(`Con esa tasa son ${fmt(r.usd)}, más de lo que debe (${fmt(d)}). Revisa los bolívares o la tasa.`);
+   else v=r.usd}
+  if(!v)return error('Escribe cuánto te pagó.');
   if(v>d)return error('Solo te debe '+fmt(d)+'. Revisa el monto.');
   if(!fechaOk(String(fd.get('fecha')||'')))return error('Revisa la fecha.');
-  D.movs.push({id:uid(),tipo:'ing',concepto:(v>=d?'Pago de ':'Abono de ')+nomCli(p),cat:'Pago de pedido',monto:v,fecha:fd.get('fecha')||hoy(),pedidoId:p.id});
-  guardar();aviso(debe(p)>0?'Anotado. Todavía debe '+fmt(debe(p)):'¡Pagado completo!')}})}
+  D.movs.push({id:uid(),tipo:'ing',concepto:(v>=d?'Pago de ':'Abono de ')+nomCli(p),cat:'Pago de pedido',monto:v,fecha:fd.get('fecha')||hoy(),pedidoId:p.id,...pagoDatos(r)});
+  guardar();aviso(debe(p)>0?'Anotado. Todavía debe '+fmt(debe(p)):completo&&r.usd!=d?'¡Pagado completo! (redondeado a '+fmt(d)+')':'¡Pagado completo!')}});
+ PG={met:'',bs:false}}
 /* al marcar Listo: mensaje listo para avisarle a la clienta (la app no puede abrir el chat sola) */
 function avisarListo(p){const c=cli(p.clienteId),d=debe(p),lista=p.items.map(i=>i.cant+' '+i.nombre).join(', ');
  if(!c||!telWa(c.tel))return aviso('¡Pedido listo!');
@@ -1176,6 +1219,10 @@ function pDinero(){
   ${par.length?`<div class="parecido">${ic('alerta')}<div style="flex:1"><p>Hay nombres que parecen el mismo producto: <b>${par.slice(0,3).map(g=>g.map(x=>esc(x.nombre)).join(' / ')).join('; ')}</b>. Únelos para que las cuentas salgan bien.</p>
    <button class="btn caramelo c-limon" data-a="unirNombres" style="min-height:46px;margin:10px 0 0;font-size:15px">Unir nombres</button></div></div>`
   :`<button class="link" data-a="unirNombres" style="color:var(--muted)">Unir nombres repetidos ${ic('der')}</button>`}</div>`:''}
+ ${(()=>{const ing=c.M.filter(m=>m.tipo=='ing');if(!ing.some(m=>m.metodo||m.bs))return'';
+  const g={};ing.forEach(m=>{const k=m.metodo||'Sin indicar';g[k]=(g[k]||0)+m.monto});const bsT=sum(ing,m=>m.bs||0),bsU=sum(ing.filter(m=>m.bs),m=>m.monto);
+  return`${titulo('¿Cómo me pagaron?')}<div class="card">${barras(Object.entries(g).sort((a,b)=>b[1]-a[1]),x=>fmt(x[1]),'linear-gradient(90deg,var(--cielo),var(--menta))')}
+   ${bsT?`<p class="sm" style="margin:4px 0 0">En bolívares entraron <b style="color:var(--ink)">${fmtBs(bsT)}</b>, que son <b style="color:var(--ink)">${fmt(bsU)}</b>.</p>`:''}</div>`})()}
  ${salidas.length?`${titulo('¿En qué se fue el dinero?')}<div class="card">${barras(salidas,x=>fmt(x[1]),'linear-gradient(90deg,var(--durazno),var(--coral))')}</div>`:''}
  ${titulo('Reportes en PDF')}
  <div class="reps">
@@ -1193,7 +1240,7 @@ function pDinero(){
  ${titulo('Movimientos de '+MESES[+MES.slice(5)-1],movs.length||null)}
  ${movs.length?'<p class="sm" style="margin:-4px 2px 6px">Toca uno para cambiarlo.</p>':''}
  ${movs.map(m=>`<button class="mov ${m.tipo}" data-a="editMov" data-id="${m.id}"><span class="ic">${ic(TIPOS[m.tipo].ic)}</span>
-  <span class="tx"><b>${esc(m.concepto||m.cat||'Sin nombre')}</b><span class="sm">${fe(m.fecha)}${m.cat&&m.concepto?' · '+esc(m.cat):''}</span></span>
+  <span class="tx"><b>${esc(m.concepto||m.cat||'Sin nombre')}</b><span class="sm">${fe(m.fecha)}${m.cat&&m.concepto?' · '+esc(m.cat):''}${m.metodo?' · '+esc(m.metodo):''}${m.bs?' · '+fmtBs(m.bs)+' a '+tasaTxt(m.tasa):''}</span></span>
   <span class="mt d">${TIPOS[m.tipo].signo}${fmt(m.monto)}</span></button>`).join('')||vacioHtml('cartera','No anotaste nada en este mes')}`;
 }
 function textoCorte(){const c=corte(MES);
@@ -1207,16 +1254,21 @@ function formMov(tipo,m){const T=TIPOS[tipo];
  ${campoDinero('monto',1,'¿Cuánto?',m?m.monto:0,'')}
  <div class="f">${paso(2,T.q)}<div class="chips" id="mv-cats">${T.cats.map(c=>`<button type="button" class="chip ${m&&m.cat==c?'on':''}" data-a="mvCat" data-id="${esc(c)}">${esc(c)}</button>`).join('')}</div>
   <input class="in" name="concepto" value="${esc(m?m.concepto:'')}" placeholder="${T.ph}"></div>
- <label class="f">${paso(3,'¿Qué día fue?')}<input class="in" type="date" name="fecha" value="${m?m.fecha:hoy()}"></label>
+ ${pagoHtml(3,m,tipo=='ing'?'¿Cómo te pagaron?':'¿Cómo pagaste?')}
+ <label class="f">${paso(4,'¿Qué día fue?')}<input class="in" type="date" name="fecha" value="${m?m.fecha:hoy()}"></label>
  ${m?`<button type="button" class="btn plano" data-a="borrarMov" data-id="${m.id}" style="margin-top:22px;color:var(--coral)">${ic('basura')}Borrar este movimiento</button>`:''}`,
- {c:T.c,onOk:fd=>{const monto=aCent(fd.get('monto')),concepto=String(fd.get('concepto')).trim(),fecha=String(fd.get('fecha')||hoy());
+ {c:T.c,onOk:fd=>{let monto=aCent(fd.get('monto'));const concepto=String(fd.get('concepto')).trim(),fecha=String(fd.get('fecha')||hoy());
+  let r=null;if(PG.bs){r=leerBs(fd);if(typeof r=='string')return error(r);monto=r.usd}
+  if(enlazado&&enlazado.id){const max=debe(enlazado)+(m?m.monto:0);if(monto>max+Math.max(5,Math.round(max*0.02)))return error('Ese pedido solo debe '+fmt(max)+'. Revisa el monto.');if(monto>max)monto=max}
   if(!monto)return error('Escribe cuánto fue.');
   if(monto>MAX_MONTO)return error('Ese monto es demasiado alto. Revísalo.');
   if(!fechaOk(fecha))return error('Revisa la fecha.');
   if(!MV.cat&&!concepto)return error('Toca una opción o escribe qué fue.');
-  if(m)Object.assign(m,{monto,concepto,cat:MV.cat,fecha});else D.movs.push({id:uid(),tipo,concepto,cat:MV.cat,monto,fecha,pedidoId:''});
+  const pd=pagoDatos(r);
+  if(m){Object.assign(m,{monto,concepto,cat:MV.cat,fecha},pd);if(!r){delete m.bs;delete m.tasa}}
+  else D.movs.push({id:uid(),tipo,concepto,cat:MV.cat,monto,fecha,pedidoId:'',...pd});
   if(TAB=='dinero')MES=mesDe(fecha);guardar();aviso('¡Guardado!')}});
- MV={cat:m?m.cat:''};
+ MV={cat:m?m.cat:''};PG={met:m&&m.metodo||'',bs:!!(m&&m.bs)};if(PG.bs)bsEco();
 }
 
 /* ---------- copia de seguridad ---------- */
@@ -1497,8 +1549,8 @@ function tablaDeudas(doc,P){const l=P.filter(p=>debe(p)>0).sort((a,b)=>a.fecha.l
 function tablaPedidos(doc,P){pdfTabla(doc,['Fecha','Clienta','Productos','Total','Pagó','Debe','Estado'],P.slice().sort((a,b)=>a.fecha.localeCompare(b.fecha))
  .map(p=>[fe(p.fecha),nomCli(p),prodsTxt(p),fmtP(p.total),fmtP(pagado(p)),fmtP(debe(p)),estadoTxt(p)]),{cols:{3:DER,4:DER,5:DER},
  foot:P.length?['','Total','',fmtP(sum(P,p=>p.total)),fmtP(sum(P,pagado)),fmtP(sum(P,debe)),'']:null})}
-function tablaMovs(doc,M){pdfTabla(doc,['Fecha','Tipo','Concepto','Categoría','Monto'],M.slice().sort((a,b)=>a.fecha.localeCompare(b.fecha))
- .map(m=>[fe(m.fecha),tipoTxt[m.tipo],m.concepto||m.cat,m.cat||'',signoP(m)]),{cols:{4:DER}})}
+function tablaMovs(doc,M){pdfTabla(doc,['Fecha','Tipo','Concepto','Cómo','Monto'],M.slice().sort((a,b)=>a.fecha.localeCompare(b.fecha))
+ .map(m=>[fe(m.fecha),tipoTxt[m.tipo],(m.concepto||m.cat)+(m.cat&&m.concepto?' ('+m.cat+')':''),[m.metodo,m.bs?fmtBs(m.bs)+' a '+tasaTxt(m.tasa):''].filter(Boolean).join(' · '),signoP(m)]),{cols:{4:DER}})}
 const errPDF=e=>{console.error(e);aviso('No se pudo crear el PDF. La primera vez necesita internet.',true)};
 
 async function repMes(){aviso('Preparando el PDF…');try{
@@ -1609,6 +1661,8 @@ const A={
  nubeInfo:()=>nubeInfo(),
  olvide:()=>olvide(),
  recTodos:()=>{REC_TODOS=!REC_TODOS;pintar()},
+ pgMet:(v,b)=>{PG.met=PG.met==v?'':v;$$('#pg-met .chip').forEach(x=>x.classList.toggle('on',x.dataset.id==PG.met))},
+ pgMon:(v,b)=>{PG.bs=v=='bs';$$('[data-a=pgMon]').forEach(x=>x.classList.toggle('on',x==b));$('#pg-bs').hidden=!PG.bs;if(PG.bs){bsEco();const i=$('#sf [name=bs]');if(i&&!i.value)i.focus()}},
  etapa:(id,b)=>{const p=ped(id);if(!p||p.entregado)return;const e=b.dataset.e;if(!ETAPAS.some(x=>x[0]==e))return;
   p.etapa=e;guardar();if(e=='listo')avisarListo(p)},
  vistaC:v=>{VISTA_C=v;pintar();window.scrollTo(0,0)},

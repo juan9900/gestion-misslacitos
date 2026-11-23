@@ -385,6 +385,41 @@ async function T(nombre,fn){try{await fn()}catch(e){ok(nombre+' (excepción)',fa
   E("D.pedidos=D.pedidos.filter(p=>p.id!='et1');guardar();FILTRO='pend';irA('inicio')");
  });
 
+ await T('25 pagos en bolívares',async()=>{
+  await telefono('A');await wait(600);
+  ok('25a lee bolívares como en Venezuela',E("[aBs('12.500,50'),aBs('12500'),aBs('1.250'),aBs('245,5'),aBs('245.67')].join()")=='1250050,1250000,125000,24550,24567',E("[aBs('12.500,50'),aBs('12500'),aBs('1.250'),aBs('245,5'),aBs('245.67')].join()"));
+  ok('25b muestra bolívares bien',E("fmtBs(1250050)")=='Bs 12.500,50');
+  const c1=E('D.clientas[0].id');
+  E(`D.pedidos.push({id:'bs1',clienteId:'${c1}',items:[{pid:'',nombre:'Toalla',cant:1,precio:1000}],total:1000,pagoPrevio:0,detalle:'',entrega:'',entregado:false,fecha:hoy()});guardar()`);
+  E("A.cobrar('bs1')");clic('[data-a=pgMet][data-id="Pago móvil"]');clic('[data-a=pgMon][data-id=bs]');
+  ok('25c muestra los campos de bolívares',!q('#pg-bs').hidden);
+  pon('#sf [name=bs]','1.230');pon('#sf [name=tasa]','245,50');
+  ok('25d calcula los dólares mientras escribe',/= \$5,01/.test(q('#bs-res').textContent)&&q('#sf [name=monto]').value=='5,01',q('#bs-res').textContent);
+  enviar();
+  const m1=E("JSON.stringify(D.movs.filter(m=>m.pedidoId=='bs1').at(-1))");
+  ok('25e abono en bolívares guarda método, Bs y tasa',/"metodo":"Pago móvil"/.test(m1)&&/"bs":123000/.test(m1)&&/"tasa":245.5/.test(m1)&&/"monto":501/.test(m1),m1);
+  E("A.cobrar('bs1')");clic('[data-a=pgMon][data-id=bs]');
+  ok('25f sugiere la última tasa',q('#sf [name=tasa]').value=='245,50',q('#sf [name=tasa]').value);
+  pon('#sf [name=bs]','1.220');enviar();
+  ok('25g si queda casi exacto cuenta como pagado completo (sin quedar debiendo centavos)',!hojaAbierta()&&E("debe(ped('bs1'))")==0,{debe:E("debe(ped('bs1'))"),err:errTxt()});
+  E(`D.pedidos.push({id:'bs2',clienteId:'${c1}',items:[{pid:'',nombre:'Lazo',cant:1,precio:500}],total:500,pagoPrevio:0,detalle:'',entrega:'',entregado:false,fecha:hoy()});guardar()`);
+  E("A.cobrar('bs2')");clic('[data-a=pgMon][data-id=bs]');pon('#sf [name=bs]','5.000');enviar();
+  ok('25h si los bolívares pasan mucho de la deuda lo rechaza',hojaAbierta()&&/más de lo que debe/.test(errTxt()),errTxt());
+  pon('#sf [name=tasa]','');enviar();ok('25i pide la tasa',/tasa/.test(errTxt()),errTxt());E('cerrar()');
+  E("A.cobrar('bs2')");clic('[data-a=pgMet][data-id=Efectivo]');enviar();
+  ok('25j pago en dólares con método',E("D.movs.filter(m=>m.pedidoId=='bs2').at(-1).metodo")=='Efectivo'&&!E("D.movs.filter(m=>m.pedidoId=='bs2').at(-1).bs"));
+  E("formMov('egr',null)");clic('#mv-cats .chip');clic('[data-a=pgMon][data-id=bs]');pon('#sf [name=bs]','2.455');enviar();
+  ok('25k un gasto también puede ir en bolívares',!hojaAbierta()&&E("D.movs.at(-1).monto")==1000&&E("D.movs.at(-1).bs")==245500,errTxt());
+  const idg=E('D.movs.at(-1).id');E(`A.editMov('${idg}')`);
+  ok('25l al editar recuerda los bolívares',!q('#pg-bs').hidden&&q('#sf [name=bs]').value=='2455,00',q('#sf [name=bs]').value);
+  clic('[data-a=pgMon][data-id=usd]');pon('#sf [name=monto]','12');enviar();
+  ok('25m al pasarlo a dólares se borran los bolívares',E(`D.movs.find(m=>m.id=='${idg}').bs`)===undefined&&E(`D.movs.find(m=>m.id=='${idg}').monto`)==1200);
+  E("MES=mesDe(hoy());irA('dinero')");
+  ok('25n el corte muestra cómo me pagaron',/Cómo me pagaron/.test(q('#pg-dinero').textContent)&&/Pago móvil/.test(q('#pg-dinero').textContent)&&/En bolívares entraron/.test(q('#pg-dinero').textContent));
+  await wait(1500);await sync();ok('25o sube a la nube con los bolívares',Object.values(srv().rows).some(r=>r.coleccion=='movs'&&r.data.bs==123000));
+  E("D.movs=D.movs.filter(m=>!['bs1','bs2'].includes(m.pedidoId)&&m.id!='"+idg+"');D.pedidos=D.pedidos.filter(p=>!['bs1','bs2'].includes(p.id));guardar();irA('inicio')");
+ });
+
  await T('15 reportes PDF',async()=>{
   const lib=await Promise.race([E('(async()=>{for(const u of LIB_PDF)await cargarScript(u);return true})()'),wait(15000).then(()=>false)]).catch(()=>false);
   if(!lib){ok('15 PDF (sin internet para la librería, no se probó)',true);return}

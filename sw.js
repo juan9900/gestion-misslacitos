@@ -1,5 +1,5 @@
 // Permite abrir la app sin internet. Cambia VERSION cuando publiques cambios.
-const VERSION = 'ml-v10';
+const VERSION = 'ml-v11';
 const BASE = ['./', 'index.html', 'config.js', 'manifest.webmanifest', 'icon-180.png', 'icon-192.png', 'icon-512.png'];
 // Librerías y fuentes (con versión fija): se guardan la primera vez que se usan.
 const CDN = [
@@ -39,12 +39,24 @@ self.addEventListener('fetch', e => {
     return;
   }
 
-  // Archivos de la app: primero internet (para recibir cambios); sin internet, lo guardado.
-  e.respondWith(
-    fetch(req).then(res => {
-      if (res && res.ok) { const c = res.clone(); caches.open(VERSION).then(x => x.put(req, c)); }
+  // Archivos de la app: primero internet (para recibir cambios). Si ya hay una copia guardada y la red
+  // tarda más de 3 segundos, se abre la copia guardada; la respuesta que llegue tarde actualiza la copia.
+  e.respondWith((async () => {
+    const cache = await caches.open(VERSION);
+    const guardado = await cache.match(req, { ignoreSearch: true });
+    const red = fetch(req).then(res => {
+      if (res && res.ok) cache.put(req, res.clone());
       return res;
-    }).catch(() => caches.match(req, { ignoreSearch: true })
-      .then(r => r || (req.mode === 'navigate' ? caches.match('index.html') : Response.error())))
-  );
+    });
+    if (!guardado) {
+      return red.catch(() => req.mode === 'navigate'
+        ? cache.match('index.html').then(r => r || Response.error())
+        : Response.error());
+    }
+    e.waitUntil(red.catch(() => {}));
+    return Promise.race([
+      red.then(res => (res && res.ok) ? res : guardado).catch(() => guardado),
+      new Promise(r => setTimeout(() => r(guardado), 3000))
+    ]);
+  })());
 });

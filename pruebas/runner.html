@@ -363,6 +363,28 @@ async function T(nombre,fn){try{await fn()}catch(e){ok(nombre+' (excepción)',fa
   await entrar();await wait(500);ok('23b se puede entrar normal',q('#login').hidden);
  });
 
+ await T('24 etapas del pedido',async()=>{
+  await telefono('A');await wait(600);
+  const c1=E('D.clientas.find(c=>c.tel).id');
+  E(`D.pedidos.push({id:'et1',clienteId:'${c1}',items:[{pid:'',nombre:'Lazo',cant:2,precio:300}],total:600,pagoPrevio:0,detalle:'',entrega:'',entregado:false,fecha:hoy()});guardar()`);
+  ok('24a pedido viejo sin etapa empieza en Anotado',E("etapaDe(ped('et1'))")=='anotado');
+  E("FILTRO='todos';irA('pedidos')");
+  clic('#p-et1 [data-a=etapa][data-e=haciendo]');
+  ok('24b pasa a Haciéndolo',E("ped('et1').etapa")=='haciendo'&&q('#p-et1 .etapas .on').textContent.includes('Haciéndolo'));
+  clic('#p-et1 [data-a=etapa][data-e=listo]');
+  ok('24c Listo ofrece avisar por WhatsApp',hojaAbierta()&&/listo/i.test(q('#sheet-b a.wa').href),q('#sheet-b').textContent.slice(0,120));
+  const m=decodeURIComponent(q('#sheet-b a.wa').href.split('text=')[1]);
+  ok('24d el mensaje dice que está listo y lo que debe',/ya está listo/.test(m)&&/6,00/.test(m),m);
+  E('cerrar()');
+  ok('24e listo sin fecha aparece en recordatorios',E("recordatorios().some(r=>r.id=='et1'&&r.tag=='Listo')"));
+  E("ped('et1').entrega=hoy();guardar()");
+  ok('24f con fecha: una sola fila de entrega que dice Listo',E("recordatorios().filter(r=>r.id=='et1'&&/Entregar/.test(r.tit)).length")==1&&E("recordatorios().find(r=>r.id=='et1'&&/Entregar/.test(r.tit)).sub").startsWith('Listo'));
+  E("A.entregar('et1')");
+  ok('24g al entregar desaparecen las etapas',E("etapaDe(ped('et1'))")=='entregado'&&!q('#p-et1 .etapas'));
+  await wait(1500);await sync();ok('24h la etapa sube a la nube',srv().rows['pedidos:et1'].data.etapa=='listo');
+  E("D.pedidos=D.pedidos.filter(p=>p.id!='et1');guardar();FILTRO='pend';irA('inicio')");
+ });
+
  await T('15 reportes PDF',async()=>{
   const lib=await Promise.race([E('(async()=>{for(const u of LIB_PDF)await cargarScript(u);return true})()'),wait(15000).then(()=>false)]).catch(()=>false);
   if(!lib){ok('15 PDF (sin internet para la librería, no se probó)',true);return}

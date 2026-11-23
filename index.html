@@ -332,6 +332,13 @@ nav button{position:relative}
 .int.cerrada{opacity:.6}
 .login-link{display:block;width:100%;margin-top:14px;border:0;background:none;color:var(--rosa);font-weight:800;font-size:15px;min-height:44px}
 
+/* ---------- etapas del pedido ---------- */
+.etapas{display:flex;gap:6px;margin-top:12px;background:var(--hondo);border-radius:16px;padding:5px}
+.etapas button{flex:1;min-width:0;min-height:44px;border:0;border-radius:12px;background:transparent;color:var(--muted);font-weight:800;font-size:13.5px;display:flex;align-items:center;justify-content:center;gap:5px;padding:4px}
+.etapas button.hecha{color:var(--ink)}
+.etapas button.on{background:var(--cielo);color:var(--tinta)}
+.etapas button.on.listo{background:var(--menta)}
+
 /* ---------- nube ---------- */
 .nube{margin-left:auto;flex:none;display:inline-flex;align-items:center;gap:6px;min-height:40px;padding:6px 12px;border-radius:30px;border:1.5px solid var(--line2);background:var(--card);color:var(--t,var(--muted));font-weight:800;font-size:13px}
 .nube .i{width:20px;height:20px}
@@ -641,8 +648,9 @@ function recordatorios(){
  D.pedidos.forEach(p=>{
   const n=nomCli(p),prods=p.items.map(i=>i.cant+' '+i.nombre).join(', ');
   if(!p.entregado&&p.entrega){const d=diasHasta(p.entrega);
-   if(d<=7)L.push({u:d<0?0:d==0?1:d==1?3:5,o:d,t:d<=0?'coral':d==1?'limon':'cielo',ic:'entregar',tit:'Entregar a '+n,sub:prods,
+   if(d<=7)L.push({u:d<0?0:d==0?1:d==1?3:5,o:d,t:d<=0?'coral':d==1?'limon':'cielo',ic:'entregar',tit:'Entregar a '+n,sub:(etapaTxt(p)?etapaTxt(p)+' · ':'')+prods,
     tag:d<0?'Atrasado '+plural(-d,'día','días'):d==0?'Es hoy':d==1?'Mañana':'En '+d+' días',a:'recEntregar',aTxt:'Entregué',id:p.id})}
+  if(!p.entregado&&!p.entrega&&etapaDe(p)=='listo')L.push({u:4,o:0,t:'menta',ic:'entregar',tit:'Entregar a '+n,sub:prods,tag:'Listo',a:'recEntregar',aTxt:'Entregué',id:p.id});
   const db=debe(p);
   if(db>0){const dias=Math.max(0,-diasHasta(p.fecha));
    L.push({u:p.entregado?2:4,o:-dias,t:p.entregado?'coral':'durazno',ic:'dinero',tit:n+' te debe '+fmt(db),
@@ -729,6 +737,10 @@ function corte(k){
  const I=t('ing'),E=t('egr'),V=t('inv');
  return{M,P,I,E,V,G:I-E-V,ventas:sum(P,p=>p.total),uds:sum(P,unidades),debenMes:sum(P,debe)}}
 const deudaTotal=()=>sum(D.pedidos,debe);
+/* etapas de un pedido que aún no se entrega; 'entregado' sigue siendo lo que manda */
+const ETAPAS=[['anotado','Anotado','nota'],['haciendo','Haciéndolo','tijera'],['listo','Listo','check']];
+const etapaDe=p=>p.entregado?'entregado':(ETAPAS.some(e=>e[0]==p.etapa)?p.etapa:'anotado');
+const etapaTxt=p=>({anotado:'',haciendo:'Haciéndolo',listo:'Listo',entregado:'Entregado'})[etapaDe(p)];
 /* el mes anterior; si es el mes en curso, solo los mismos días (del 1 a hoy) para que sea justo */
 function mesAnterior(k){const[a,m]=k.split('-').map(Number),pd=new Date(a,m-2,1),pk=pd.getFullYear()+'-'+pad(pd.getMonth()+1);
  const lim=k==mesDe(hoy())?new Date().getDate():0,dentro=f=>mesDe(f)==pk&&(!lim||+String(f).slice(8,10)<=lim);
@@ -813,10 +825,12 @@ function cardPedido(p){
  return`<article class="card ped ${color}" id="p-${p.id}">
  <div class="fila"><div style="min-width:0"><div class="nm d">${esc(nomCli(p))}</div>
   <div class="meta"><span>${ic('cal','s')}${fe(p.fecha)}</span>${c&&c.tel?`<span>${ic('tel','s')}${esc(c.tel)}</span>`:''}</div></div>
-  ${p.entregado?`<span class="tag t-menta">${ic('check','s')}Entregado</span>`:p.entrega?entregaTag(p.entrega):'<span class="tag t-durazno">Por entregar</span>'}</div>
+  ${p.entregado?`<span class="tag t-menta">${ic('check','s')}Entregado</span>`:etapaDe(p)=='listo'&&!(p.entrega&&diasHasta(p.entrega)<0)?`<span class="tag t-menta">${ic('check','s')}Listo</span>`:p.entrega?entregaTag(p.entrega):'<span class="tag t-durazno">Por entregar</span>'}</div>
  <ul class="its">${p.items.map(i=>`<li><span>${i.cant} × ${esc(i.nombre)}</span><span>${fmt(i.precio*i.cant)}</span></li>`).join('')}</ul>
  ${p.detalle?`<div class="det">${ic('nota','s')}<span>${esc(p.detalle)}</span></div>`:''}
  ${p.entrega&&!p.entregado?`<div class="meta"><span>${ic('cal','s')}Entregar el ${fe(p.entrega)}</span></div>`:''}
+ ${p.entregado?'':(()=>{const e=etapaDe(p),i=ETAPAS.findIndex(x=>x[0]==e);
+  return`<div class="etapas" role="group" aria-label="Etapa del pedido">${ETAPAS.map(([k,t,ico],j)=>`<button type="button" class="${k==e?'on '+k:j<i?'hecha':''}" data-a="etapa" data-id="${p.id}" data-e="${k}">${ic(ico,'s')}${t}</button>`).join('')}</div>`})()}
  <div class="cuenta"><div class="sm">Total <b>${fmt(p.total)}</b><br>Pagó <b>${fmt(pg)}</b></div>
   <div class="saldo d ${d>0?'k-coral':'k-menta'}"><small>${d>0?'Debe':'Pagado'}</small>${d>0?fmt(d):'Completo'}</div></div>
  <div class="acts">
@@ -944,6 +958,12 @@ function cobrar(id){const p=ped(id);if(!p)return aviso('Ese pedido ya no existe.
   if(!fechaOk(String(fd.get('fecha')||'')))return error('Revisa la fecha.');
   D.movs.push({id:uid(),tipo:'ing',concepto:(v>=d?'Pago de ':'Abono de ')+nomCli(p),cat:'Pago de pedido',monto:v,fecha:fd.get('fecha')||hoy(),pedidoId:p.id});
   guardar();aviso(debe(p)>0?'Anotado. Todavía debe '+fmt(debe(p)):'¡Pagado completo!')}})}
+/* al marcar Listo: mensaje listo para avisarle a la clienta (la app no puede abrir el chat sola) */
+function avisarListo(p){const c=cli(p.clienteId),d=debe(p),lista=p.items.map(i=>i.cant+' '+i.nombre).join(', ');
+ if(!c||!telWa(c.tel))return aviso('¡Pedido listo!');
+ const t=`¡Hola ${c.nombre.split(' ')[0]}! 🎀 Te escribe Miss Lacitoss.\n¡Tu pedido ya está listo! (${lista})`+(d>0?`\nQueda pendiente ${fmt(d)}.`:'')+`\n¿Cuándo te queda bien buscarlo? 💖`;
+ hoja('¡Pedido listo!',`<div class="nota">${ic('check')}<span>El pedido de <b>${esc(c.nombre)}</b> quedó listo. ¿Le avisas?</span></div>
+  <a class="btn caramelo wa" href="https://wa.me/${telWa(c.tel)}?text=${encodeURIComponent(t)}" target="_blank" rel="noopener" style="margin-top:18px">${ic('wa')}Avisarle por WhatsApp</a>`,{sinBoton:true})}
 function waPedido(id){const p=ped(id),c=cli(p.clienteId);if(!c||!c.tel)return;
  const d=debe(p),lista=p.items.map(i=>i.cant+' '+i.nombre).join(', ');
  let t=`¡Hola ${c.nombre.split(' ')[0]}! 🎀 Te escribe Miss Lacitoss.\n`;
@@ -1589,6 +1609,8 @@ const A={
  nubeInfo:()=>nubeInfo(),
  olvide:()=>olvide(),
  recTodos:()=>{REC_TODOS=!REC_TODOS;pintar()},
+ etapa:(id,b)=>{const p=ped(id);if(!p||p.entregado)return;const e=b.dataset.e;if(!ETAPAS.some(x=>x[0]==e))return;
+  p.etapa=e;guardar();if(e=='listo')avisarListo(p)},
  vistaC:v=>{VISTA_C=v;pintar();window.scrollTo(0,0)},
  verInteresadas:()=>{VISTA_C='interesadas';irA('clientas')},
  verCerradas:()=>{VER_CERRADAS=!VER_CERRADAS;pintar()},
